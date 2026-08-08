@@ -170,13 +170,16 @@ Read [`SECURITY.md`](SECURITY.md) before putting this on a public URL.
 
 ## Roadmap
 
-1. Improve ride creation UX with Discord modals.
-2. Ride leader/admin roles.
-3. Manual attendance override.
-4. Winter Cup seasons and configurable scoring.
-5. Achievements such as Winter Warrior and Tuesday Streak.
-6. Outdoor rides using the same `/ride` model.
-7. Better Strava activity matching and deauthorization handling.
+GitHub Issues are the source of truth for the project roadmap.
+
+1. **[v0.1 Deployment & Discord MVP](https://github.com/joakimbrandstrom/ckuni-discord/issues/20)** — deploy the home-server stack, connect Discord, validate the complete ride flow, harden reminders and add Ride Leader/Admin permissions.
+2. **[v0.2 Pilot & UX](https://github.com/joakimbrandstrom/ckuni-discord/issues/21)** — improve ride creation/editing, add templates and run a real CK UNI pilot with 5–10 riders.
+3. **[v0.3 Strava & Attendance](https://github.com/joakimbrandstrom/ckuni-discord/issues/22)** — harden opt-in Strava integration, privacy controls, manual attendance and activity matching.
+4. **[v0.4 Winter Cup & Community](https://github.com/joakimbrandstrom/ckuni-discord/issues/23)** — seasons, participation scoring, weekly recaps, achievements and Discord interest roles.
+
+Future backlog includes [quick spontaneous rides](https://github.com/joakimbrandstrom/ckuni-discord/issues/18) and [outdoor club rides](https://github.com/joakimbrandstrom/ckuni-discord/issues/19).
+
+Priorities are encoded in issue titles: `P0` = required for the first deployment, `P1` = pilot/MVP usability, `P2` = Strava/attendance, `P3` = community features, and `P4` = future digital-clubhouse expansion.
 
 ## Development
 
