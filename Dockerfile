@@ -15,6 +15,11 @@ RUN npm run build && npm prune --omit=dev
 
 FROM registry.access.redhat.com/hi/nodejs:24 AS runtime
 
+USER 0
+
+RUN rm -rf /usr/lib/node_modules_24/npm \
+    && rm -f /usr/bin/npm /usr/bin/npx
+
 ENV NODE_ENV=production
 WORKDIR /app
 
