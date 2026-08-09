@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import { pool } from './db/pool.js';
 import { sendChannelMessage } from './discord/api.js';
 import { config } from './config.js';
+import { needs24hReminder, needs30mReminder } from './rides/reminder-thresholds.js';
 
 type ReminderRide = {
   id: string;
@@ -43,10 +44,13 @@ async function tick(): Promise<void> {
       const ms = new Date(ride.starts_at).getTime() - now;
       const minutes = ms / 60_000;
 
-      if (!ride.reminder_24h_sent && minutes <= 24 * 60 && minutes > 23 * 60) {
+      // Catch up after downtime: send if the threshold has passed but the ride
+      // has not started yet. The upper bound is kept to avoid a fresh start
+      // sending a 24h reminder moments before the 30m one is due.
+      if (needs24hReminder(ride.reminder_24h_sent, minutes)) {
         await sendReminder(ride, '24h');
       }
-      if (!ride.reminder_30m_sent && minutes <= 30 && minutes > 20) {
+      if (needs30mReminder(ride.reminder_30m_sent, minutes)) {
         await sendReminder(ride, '30m');
       }
     }
