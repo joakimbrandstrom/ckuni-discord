@@ -8,8 +8,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Bind only to loopback for local diagnostics. External traffic should
+    # reach the bot through Cloudflare Tunnel, not through the LAN/router.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
@@ -31,6 +33,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Optional profile for the public Discord/Strava ingress. The tunnel is
+  # outbound-only from the home server and talks to the bot over Docker's
+  # private network. Start with: docker compose --profile tunnel up -d --build
+  cloudflared:
+    image: cloudflare/cloudflared:2026.7.2
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    command: tunnel --no-autoupdate run
+    depends_on:
+      bot:
+        condition: service_healthy
 
 volumes:
   postgres_data:
