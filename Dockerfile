@@ -1,6 +1,5 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
-RUN npm install -g npm@latest
 COPY package.json ./
 RUN npm install
 COPY tsconfig.json ./
