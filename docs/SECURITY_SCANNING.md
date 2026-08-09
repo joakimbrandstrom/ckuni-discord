@@ -9,7 +9,7 @@ Two Trivy checks run automatically:
 - **Repository scan**: vulnerabilities, secrets, and misconfigurations in the checked-out repository.
 - **Container image scan**: builds the application image from `Dockerfile` and scans the resulting runtime image for vulnerabilities.
 
-Both checks fail on fixable `HIGH` or `CRITICAL` findings.
+Both checks fail on `HIGH` or `CRITICAL` findings; for vulnerability findings, only items with available fixes are considered.
 
 ## SonarQube
 
