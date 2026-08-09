@@ -1,0 +1,81 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trivy-repository:
+    name: Trivy repository scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan repository
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+
+  trivy-image:
+    name: Trivy container image scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build container image
+        run: docker build --tag ckuni-discord:ci .
+
+      - name: Scan container image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: image
+          image-ref: ckuni-discord:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+
+  sonarqube:
+    name: SonarQube scan
+    runs-on: ubuntu-latest
+    env:
+      SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ROOT_CERT: ${{ secrets.SONAR_ROOT_CERT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install SonarQube root certificate
+        if: ${{ env.SONAR_ROOT_CERT != '' }}
+        run: |
+          printf '%s' "$SONAR_ROOT_CERT" | sudo tee /usr/local/share/ca-certificates/sonarqube.crt >/dev/null
+          sudo update-ca-certificates
+
+      - name: SonarQube scan
+        if: ${{ env.SONAR_HOST_URL != '' && env.SONAR_PROJECT_KEY != '' && env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        with:
+          args: >
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
+
+      - name: Explain skipped SonarQube scan
+        if: ${{ env.SONAR_HOST_URL == '' || env.SONAR_PROJECT_KEY == '' || env.SONAR_TOKEN == '' }}
+        run: |
+          echo "::notice::SonarQube scan skipped. Configure repository variables SONAR_HOST_URL and SONAR_PROJECT_KEY, plus secret SONAR_TOKEN."
