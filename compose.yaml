@@ -6,6 +6,8 @@ services:
     env_file:
       - .env
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     # Bind only to loopback for local diagnostics. External traffic should
@@ -18,6 +20,17 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  migrate:
+    build:
+      context: .
+    restart: "no"
+    env_file:
+      - .env
+    command: ["node", "dist/src/db/migrate.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:17-alpine
