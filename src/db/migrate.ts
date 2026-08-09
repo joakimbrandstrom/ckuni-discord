@@ -40,7 +40,9 @@ async function migrate(): Promise<void> {
   }
 }
 
-migrate().catch((error) => {
+try {
+  await migrate();
+} catch (error) {
   console.error(error);
   process.exit(1);
-});
+}

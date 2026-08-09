@@ -17,11 +17,9 @@ const response = await fetch('https://www.strava.com/api/v3/push_subscriptions',
   body
 });
 
-const text = await response.text();
 if (!response.ok) {
-  console.error(`Failed to create Strava webhook subscription (${response.status}): ${text}`);
+  console.error('Failed to create Strava webhook subscription.');
   process.exit(1);
 }
 
-console.log(`Created Strava webhook subscription for ${callbackUrl}`);
-console.log(text);
+console.log('Created Strava webhook subscription.');

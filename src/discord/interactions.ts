@@ -44,6 +44,81 @@ function value<T extends string | number>(options: DiscordOption[] | undefined, 
   return options?.find((option) => option.name === name)?.value as T | undefined;
 }
 
+function scheduledEventLocation(zwiftUrl: string | undefined, rideType: string): string {
+  if (zwiftUrl) return 'Zwift + Discord Voice';
+  if (rideType === 'outdoor') return 'CK UNI outdoor ride';
+  return 'Discord / Zwift';
+}
+
+async function handleCreateRide(
+  user: DiscordUser,
+  channelId: string,
+  sub: DiscordOption
+): Promise<Record<string, unknown>> {
+  try {
+    const title = value<string>(sub.options, 'title')!;
+    const date = value<string>(sub.options, 'date')!;
+    const time = value<string>(sub.options, 'time')!;
+    const duration = value<number>(sub.options, 'duration')!;
+    const rideType = value<string>(sub.options, 'type')!;
+    const zwiftUrl = value<string>(sub.options, 'zwift_url');
+    const description = value<string>(sub.options, 'description');
+    const startsAt = parseLocalRideStart(date, time, config.TIMEZONE);
+    if (startsAt.getTime() < Date.now() - 60_000) return ephemeral('Ride start time must be in the future.');
+
+    const ride = await createRide({
+      title,
+      description,
+      rideType,
+      startsAt,
+      durationMinutes: duration,
+      zwiftUrl,
+      creatorDiscordId: user.id,
+      channelId
+    });
+    await setParticipant(ride.id, user.id, 'going');
+    const counts = await participantCounts(ride.id);
+
+    setImmediate(() => {
+      const endsAt = new Date(startsAt.getTime() + duration * 60_000);
+      void createScheduledEvent({
+        name: title,
+        description,
+        startsAt,
+        endsAt,
+        location: scheduledEventLocation(zwiftUrl, rideType)
+      })
+        .then((eventId) => setDiscordEventId(ride.id, eventId))
+        .catch((error) => console.error('Failed to create scheduled event:', error));
+    });
+
+    return response(rideMessage(ride, counts, config.TIMEZONE));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not create ride';
+    return ephemeral(message);
+  }
+}
+
+async function handleListRides(): Promise<Record<string, unknown>> {
+  const rides = await listUpcomingRides();
+  if (!rides.length) return ephemeral('No upcoming CK UNI rides found.');
+  const lines = rides.map((ride) => {
+    const start = new Date(ride.starts_at).toLocaleString('sv-SE', { timeZone: config.TIMEZONE, dateStyle: 'short', timeStyle: 'short' });
+    return `**#${ride.id}** — ${ride.title} — ${start}`;
+  });
+  return ephemeral(`### Upcoming CK UNI rides\n${lines.join('\n')}`);
+}
+
+async function handleCancelRide(user: DiscordUser, sub: DiscordOption): Promise<Record<string, unknown>> {
+  const id = String(value<number>(sub.options, 'id'));
+  const ride = await cancelRide(id, user.id);
+  if (!ride) return ephemeral('Ride not found, already cancelled, or you are not the creator.');
+  if (ride.discord_event_id) {
+    void cancelScheduledEvent(ride.discord_event_id).catch((error) => console.error(error));
+  }
+  return ephemeral(`Cancelled **${ride.title}** (#${ride.id}).`);
+}
+
 async function handleRide(interaction: DiscordInteraction): Promise<Record<string, unknown>> {
   const user = getUser(interaction);
   if (!user || !interaction.channel_id) return ephemeral('This command must be used inside the CK UNI server.');
@@ -52,70 +127,9 @@ async function handleRide(interaction: DiscordInteraction): Promise<Record<strin
   const sub = findSubcommand(interaction.data?.options);
   if (!sub) return ephemeral('Missing ride subcommand.');
 
-  if (sub.name === 'create') {
-    try {
-      const title = value<string>(sub.options, 'title')!;
-      const date = value<string>(sub.options, 'date')!;
-      const time = value<string>(sub.options, 'time')!;
-      const duration = value<number>(sub.options, 'duration')!;
-      const rideType = value<string>(sub.options, 'type')!;
-      const zwiftUrl = value<string>(sub.options, 'zwift_url');
-      const description = value<string>(sub.options, 'description');
-      const startsAt = parseLocalRideStart(date, time, config.TIMEZONE);
-      if (startsAt.getTime() < Date.now() - 60_000) return ephemeral('Ride start time must be in the future.');
-
-      const ride = await createRide({
-        title,
-        description,
-        rideType,
-        startsAt,
-        durationMinutes: duration,
-        zwiftUrl,
-        creatorDiscordId: user.id,
-        channelId: interaction.channel_id
-      });
-      await setParticipant(ride.id, user.id, 'going');
-      const counts = await participantCounts(ride.id);
-
-      setImmediate(() => {
-        const endsAt = new Date(startsAt.getTime() + duration * 60_000);
-        void createScheduledEvent({
-          name: title,
-          description,
-          startsAt,
-          endsAt,
-          location: zwiftUrl ? 'Zwift + Discord Voice' : rideType === 'outdoor' ? 'CK UNI outdoor ride' : 'Discord / Zwift'
-        })
-          .then((eventId) => setDiscordEventId(ride.id, eventId))
-          .catch((error) => console.error('Failed to create scheduled event:', error));
-      });
-
-      return response(rideMessage(ride, counts, config.TIMEZONE));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not create ride';
-      return ephemeral(message);
-    }
-  }
-
-  if (sub.name === 'list') {
-    const rides = await listUpcomingRides();
-    if (!rides.length) return ephemeral('No upcoming CK UNI rides found.');
-    const lines = rides.map((ride) => {
-      const start = new Date(ride.starts_at).toLocaleString('sv-SE', { timeZone: config.TIMEZONE, dateStyle: 'short', timeStyle: 'short' });
-      return `**#${ride.id}** — ${ride.title} — ${start}`;
-    });
-    return ephemeral(`### Upcoming CK UNI rides\n${lines.join('\n')}`);
-  }
-
-  if (sub.name === 'cancel') {
-    const id = String(value<number>(sub.options, 'id'));
-    const ride = await cancelRide(id, user.id);
-    if (!ride) return ephemeral('Ride not found, already cancelled, or you are not the creator.');
-    if (ride.discord_event_id) {
-      void cancelScheduledEvent(ride.discord_event_id).catch((error) => console.error(error));
-    }
-    return ephemeral(`Cancelled **${ride.title}** (#${ride.id}).`);
-  }
+  if (sub.name === 'create') return handleCreateRide(user, interaction.channel_id, sub);
+  if (sub.name === 'list') return handleListRides();
+  if (sub.name === 'cancel') return handleCancelRide(user, sub);
 
   return ephemeral('Unknown ride subcommand.');
 }
@@ -127,7 +141,7 @@ async function handleButton(interaction: DiscordInteraction): Promise<Record<str
   const [action, rideId] = customId.split(':');
   if (!rideId || !['ride_join', 'ride_maybe'].includes(action)) return ephemeral('Unknown action.');
   const ride = await getRide(rideId);
-  if (!ride || ride.status !== 'scheduled') return ephemeral('This ride is no longer available.');
+  if (ride?.status !== 'scheduled') return ephemeral('This ride is no longer available.');
 
   await upsertUser(user.id, displayName(user));
   await setParticipant(rideId, user.id, action === 'ride_join' ? 'going' : 'maybe');

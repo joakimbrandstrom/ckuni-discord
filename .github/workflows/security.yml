@@ -91,7 +91,7 @@ jobs:
 
       - name: Generate test coverage
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npm run coverage
 
       - name: Install SonarQube root certificate

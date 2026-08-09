@@ -8,7 +8,7 @@ async function discordFetch(path: string, init: RequestInit): Promise<Response> 
     headers: {
       Authorization: `Bot ${config.DISCORD_BOT_TOKEN}`,
       'Content-Type': 'application/json',
-      ...(init.headers ?? {})
+      ...init.headers
     }
   });
 
