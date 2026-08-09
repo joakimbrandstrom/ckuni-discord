@@ -8,8 +8,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Bind only to loopback for local diagnostics. External traffic should
+    # reach the bot through Cloudflare Tunnel, not through the LAN/router.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
@@ -31,6 +33,31 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Recommended permanent ingress. Create a remotely-managed Cloudflare
+  # Tunnel, add a published hostname that targets http://bot:3000, and put
+  # the tunnel token in CLOUDFLARE_TUNNEL_TOKEN.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.7.2
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    command: tunnel --no-autoupdate run
+    depends_on:
+      bot:
+        condition: service_healthy
+
+  # Development-only ingress. No Cloudflare account or token is required.
+  # The generated trycloudflare.com URL is printed in this container's logs.
+  cloudflared-quick:
+    image: cloudflare/cloudflared:2026.7.2
+    restart: unless-stopped
+    profiles: ["quick-tunnel"]
+    command: tunnel --no-autoupdate --url http://bot:3000
+    depends_on:
+      bot:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -12,6 +12,8 @@ Digital clubhouse for CK UNI cycling: Discord community, Zwift group rides and o
 - Automatic 24-hour and 30-minute reminders
 - PostgreSQL persistence
 - Docker Compose deployment for a home server
+- Cloudflare Tunnel ingress with no router port-forward
+- Cloudflare Quick Tunnel profile for the first test
 - `/health` and `/ready` endpoints
 - Optional `/strava connect` OAuth flow
 - Strava webhook receiver and basic VirtualRide → CK UNI ride matching
@@ -21,13 +23,22 @@ Digital clubhouse for CK UNI cycling: Discord community, Zwift group rides and o
 ## Architecture
 
 ```text
-Discord ─────┐
-             ├── HTTPS ──> CK UNI bot (Fastify/TypeScript) ──> PostgreSQL
-Strava ──────┘                         │
-                                      └── Discord REST API
+Discord / Strava
+      |
+      v
+Cloudflare HTTPS
+      |
+      v
+Cloudflare Tunnel (outbound-only)
+      |
+      v
+cloudflared container
+      |
+      v
+CK UNI bot (Fastify/TypeScript) ---> PostgreSQL
 ```
 
-Discord remains the UI. Zwift remains the place where the ride happens. Strava is only used for opt-in activity data.
+Discord remains the UI. Zwift remains the place where the ride happens. Strava is only used for opt-in activity data. The rest of the home server can remain behind VPN/Tailscale.
 
 ## 1. Create the Discord application
 
@@ -55,7 +66,6 @@ DISCORD_APPLICATION_ID=...
 DISCORD_PUBLIC_KEY=...
 DISCORD_BOT_TOKEN=...
 DISCORD_GUILD_ID=...
-PUBLIC_BASE_URL=https://bot.example.com
 ```
 
 Do not commit `.env`.
@@ -66,16 +76,16 @@ Do not commit `.env`.
 docker compose up -d --build
 ```
 
-Check:
+The bot is deliberately bound only to the server's loopback interface:
 
 ```bash
-curl http://localhost:3000/health
-curl http://localhost:3000/ready
+curl http://127.0.0.1:3000/health
+curl http://127.0.0.1:3000/ready
 ```
 
-## 4. Register Discord commands
+It should not be reachable directly through the server's LAN IP.
 
-The easiest way is to run the registration script from the bot container:
+## 4. Register Discord commands
 
 ```bash
 docker compose run --rm bot node dist/src/discord/register-commands.js
@@ -88,24 +98,55 @@ npm install
 npm run commands:register
 ```
 
-## 5. Expose HTTPS
+## 5. First public test — no domain required
 
-Discord must reach:
+Start the Cloudflare Quick Tunnel profile:
 
-```text
-POST https://bot.example.com/discord/interactions
+```bash
+docker compose --profile quick-tunnel up -d --build
+docker compose logs cloudflared-quick
 ```
 
-Strava later needs:
+Copy the generated URL, for example:
 
 ```text
-GET/POST https://bot.example.com/strava/webhook
-GET      https://bot.example.com/strava/oauth/callback
+https://random-words.trycloudflare.com
 ```
 
-A reverse proxy or tunnel is recommended. Do **not** expose PostgreSQL to the internet.
+Set the Discord application's Interactions Endpoint URL to:
 
-See [`docs/LOCAL_DEPLOYMENT.md`](docs/LOCAL_DEPLOYMENT.md).
+```text
+https://random-words.trycloudflare.com/discord/interactions
+```
+
+Then test `/ping` in Discord.
+
+Quick Tunnel is development-only and the hostname changes when recreated.
+
+## 6. Permanent Cloudflare Tunnel
+
+After the first test works, create a remotely-managed Cloudflare Tunnel and route your chosen public hostname to:
+
+```text
+http://bot:3000
+```
+
+Put the tunnel token and hostname in `.env`:
+
+```dotenv
+CLOUDFLARE_TUNNEL_TOKEN=eyJ...
+PUBLIC_BASE_URL=https://bot.your-domain.example
+```
+
+Start:
+
+```bash
+docker compose --profile tunnel up -d --build
+```
+
+No router port-forward is needed. PostgreSQL remains private and the bot's host port remains loopback-only.
+
+See [`docs/CLOUDFLARE_TUNNEL.md`](docs/CLOUDFLARE_TUNNEL.md) for the exact Cloudflare setup and troubleshooting steps, and [`docs/LOCAL_DEPLOYMENT.md`](docs/LOCAL_DEPLOYMENT.md) for home-server operations.
 
 ## Discord commands
 
@@ -160,13 +201,16 @@ SQL migrations live in [`migrations/`](migrations/).
 
 ## Security
 
+- No router port-forward is required for the recommended deployment.
+- The bot publishes port 3000 only on `127.0.0.1` for local diagnostics.
+- Cloudflare Tunnel reaches `bot:3000` through Docker's private network.
+- PostgreSQL is not published by Compose.
 - Discord interaction signatures are verified with Ed25519 before commands are processed.
 - Strava tokens are encrypted using AES-256-GCM.
 - `.env` is ignored by Git.
-- PostgreSQL is not published by Compose.
 - Strava is opt-in per athlete.
 
-Read [`SECURITY.md`](SECURITY.md) before putting this on a public URL.
+Read [`SECURITY.md`](SECURITY.md) before putting this on a permanent public hostname.
 
 ## Roadmap
 
