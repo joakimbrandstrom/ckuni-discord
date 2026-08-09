@@ -67,46 +67,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
-      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      SONAR_ROOT_CERT: ${{ secrets.SONAR_ROOT_CERT }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Require SonarQube configuration
-        run: |
-          if [ -z "$SONAR_HOST_URL" ] || \
-             [ -z "$SONAR_PROJECT_KEY" ] || \
-             [ -z "$SONAR_ORGANIZATION" ] || \
-             [ -z "$SONAR_TOKEN" ]; then
-            echo "::error::Configure SONAR_HOST_URL, SONAR_PROJECT_KEY and SONAR_ORGANIZATION repository variables, plus the SONAR_TOKEN secret."
-            exit 1
-          fi
-
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
 
-      - name: Generate test coverage
-        run: |
-          npm ci --ignore-scripts
-          npm run coverage
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
 
-      - name: Install SonarQube root certificate
-        if: ${{ env.SONAR_ROOT_CERT != '' }}
-        run: |
-          printf '%s' "$SONAR_ROOT_CERT" | sudo tee /usr/local/share/ca-certificates/sonarqube.crt >/dev/null
-          sudo update-ca-certificates
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test with coverage
+        run: npm run coverage
+
+      - name: Verify coverage report
+        run: test -s coverage/lcov.info
 
       - name: SonarQube scan
         uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
-        with:
-          args: >
-            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
-            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
