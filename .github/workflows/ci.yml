@@ -8,21 +8,29 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Validate Docker Compose
         run: |
           cp .env.example .env
           docker compose config >/dev/null
           docker compose --profile quick-tunnel config >/dev/null
           docker compose --profile tunnel config >/dev/null
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
-      - run: npm install
+          cache: npm
+      - run: npm ci
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
