@@ -62,6 +62,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install SonarQube root certificate
+        if: ${{ env.SONAR_ROOT_CERT != '' }}
+        run: |
+          printf '%s' "$SONAR_ROOT_CERT" | sudo tee /usr/local/share/ca-certificates/sonarqube.crt >/dev/null
+          sudo update-ca-certificates
+
       - name: SonarQube scan
         if: ${{ env.SONAR_HOST_URL != '' && env.SONAR_PROJECT_KEY != '' && env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@v8.2.1
