@@ -34,9 +34,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Optional profile for the public Discord/Strava ingress. The tunnel is
-  # outbound-only from the home server and talks to the bot over Docker's
-  # private network. Start with: docker compose --profile tunnel up -d --build
+  # Recommended permanent ingress. Create a remotely-managed Cloudflare
+  # Tunnel, add a published hostname that targets http://bot:3000, and put
+  # the tunnel token in CLOUDFLARE_TUNNEL_TOKEN.
   cloudflared:
     image: cloudflare/cloudflared:2026.7.2
     restart: unless-stopped
@@ -44,6 +44,17 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     command: tunnel --no-autoupdate run
+    depends_on:
+      bot:
+        condition: service_healthy
+
+  # Development-only ingress. No Cloudflare account or token is required.
+  # The generated trycloudflare.com URL is printed in this container's logs.
+  cloudflared-quick:
+    image: cloudflare/cloudflared:2026.7.2
+    restart: unless-stopped
+    profiles: ["quick-tunnel"]
+    command: tunnel --no-autoupdate --url http://bot:3000
     depends_on:
       bot:
         condition: service_healthy
