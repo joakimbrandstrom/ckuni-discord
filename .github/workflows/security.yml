@@ -69,6 +69,7 @@ jobs:
     env:
       SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
       SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_ROOT_CERT: ${{ secrets.SONAR_ROOT_CERT }}
     steps:
@@ -79,8 +80,11 @@ jobs:
 
       - name: Require SonarQube configuration
         run: |
-          if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_PROJECT_KEY" ] || [ -z "$SONAR_TOKEN" ]; then
-            echo "::error::Configure SONAR_HOST_URL and SONAR_PROJECT_KEY repository variables and the SONAR_TOKEN secret."
+          if [ -z "$SONAR_HOST_URL" ] || \
+             [ -z "$SONAR_PROJECT_KEY" ] || \
+             [ -z "$SONAR_ORGANIZATION" ] || \
+             [ -z "$SONAR_TOKEN" ]; then
+            echo "::error::Configure SONAR_HOST_URL, SONAR_PROJECT_KEY and SONAR_ORGANIZATION repository variables, plus the SONAR_TOKEN secret."
             exit 1
           fi
 
@@ -105,3 +109,4 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
+            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
