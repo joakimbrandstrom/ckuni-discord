@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-const optionalNonEmpty = z.string().trim().min(1).optional();
+import { optionalNonEmpty } from './env.js';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
