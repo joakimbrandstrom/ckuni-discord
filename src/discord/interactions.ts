@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { verifyDiscordSignature } from './signature.js';
 import type { DiscordInteraction, DiscordOption, DiscordUser } from './types.js';
 import { createScheduledEvent, cancelScheduledEvent } from './api.js';
+import { isRideManager } from './auth.js';
 import {
   cancelRide,
   createRide,
@@ -127,9 +128,19 @@ async function handleRide(interaction: DiscordInteraction): Promise<Record<strin
   const sub = findSubcommand(interaction.data?.options);
   if (!sub) return ephemeral('Missing ride subcommand.');
 
-  if (sub.name === 'create') return handleCreateRide(user, interaction.channel_id, sub);
+  if (sub.name === 'create') {
+    if (!isRideManager(interaction, config.DISCORD_RIDE_LEADER_ROLE_ID, config.DISCORD_ADMIN_ROLE_ID)) {
+      return ephemeral('🚫 Only Ride Leaders and Admins can create rides.');
+    }
+    return handleCreateRide(user, interaction.channel_id, sub);
+  }
   if (sub.name === 'list') return handleListRides();
-  if (sub.name === 'cancel') return handleCancelRide(user, sub);
+  if (sub.name === 'cancel') {
+    if (!isRideManager(interaction, config.DISCORD_RIDE_LEADER_ROLE_ID, config.DISCORD_ADMIN_ROLE_ID)) {
+      return ephemeral('🚫 Only Ride Leaders and Admins can cancel rides.');
+    }
+    return handleCancelRide(user, sub);
+  }
 
   return ephemeral('Unknown ride subcommand.');
 }

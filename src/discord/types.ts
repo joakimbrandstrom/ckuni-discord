@@ -18,7 +18,7 @@ export type DiscordInteraction = {
   application_id: string;
   guild_id?: string;
   channel_id?: string;
-  member?: { user: DiscordUser };
+  member?: { user: DiscordUser; roles?: string[] };
   user?: DiscordUser;
   data?: {
     name?: string;

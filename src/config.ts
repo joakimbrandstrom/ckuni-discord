@@ -14,6 +14,8 @@ const schema = z.object({
   DISCORD_PUBLIC_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/),
   DISCORD_BOT_TOKEN: z.string().min(1),
   DISCORD_GUILD_ID: z.string().min(1),
+  DISCORD_RIDE_LEADER_ROLE_ID: optionalNonEmpty,
+  DISCORD_ADMIN_ROLE_ID: optionalNonEmpty,
 
   STRAVA_CLIENT_ID: optionalNonEmpty,
   STRAVA_CLIENT_SECRET: optionalNonEmpty,
