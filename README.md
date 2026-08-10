@@ -238,9 +238,25 @@ Run checks:
 
 ```bash
 npm test
+npm run coverage
 npm run typecheck
 npm run build
 ```
+
+The test suite uses Node's built-in test runner through `tsx`. HTTP tests use
+`Fastify.inject()`, so they do not open a network port. PostgreSQL integration
+tests run when `TEST_DATABASE_URL` is set; they apply the real migrations before
+testing ride lifecycle, participation, attendance, leaderboard, and Strava
+activity matching behavior:
+
+```bash
+TEST_DATABASE_URL=postgres://ckuni:password@localhost:5432/ckuni_test \
+  npm run test:integration
+```
+
+CI provides an isolated PostgreSQL service for these tests. A separate smoke
+job builds the production image, starts it with the Compose PostgreSQL and
+migration services, and probes both `/health` and `/ready`.
 
 ## License
 

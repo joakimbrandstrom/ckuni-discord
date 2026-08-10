@@ -1,9 +1,10 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pool } from './pool.js';
+import type { Pool } from 'pg';
 
-async function migrate(): Promise<void> {
-  const client = await pool.connect();
+export async function migrate(database: Pool = pool, migrationsDir = resolve(process.cwd(), 'migrations')): Promise<void> {
+  const client = await database.connect();
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -12,8 +13,7 @@ async function migrate(): Promise<void> {
       )
     `);
 
-    const dir = resolve(process.cwd(), 'migrations');
-    const files = (await readdir(dir)).filter((f) => f.endsWith('.sql')).sort();
+    const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
 
     for (const filename of files) {
       const already = await client.query(
@@ -22,7 +22,7 @@ async function migrate(): Promise<void> {
       );
       if (already.rowCount) continue;
 
-      const sql = await readFile(resolve(dir, filename), 'utf8');
+      const sql = await readFile(resolve(migrationsDir, filename), 'utf8');
       await client.query('BEGIN');
       try {
         await client.query(sql);
@@ -36,13 +36,16 @@ async function migrate(): Promise<void> {
     }
   } finally {
     client.release();
-    await pool.end();
   }
 }
 
-try {
-  await migrate();
-} catch (error) {
-  console.error(error);
-  process.exit(1);
+if (process.argv[1] && import.meta.url === new URL(`file://${resolve(process.argv[1])}`).href) {
+  try {
+    await migrate();
+    await pool.end();
+  } catch (error) {
+    console.error(error);
+    await pool.end();
+    process.exitCode = 1;
+  }
 }
