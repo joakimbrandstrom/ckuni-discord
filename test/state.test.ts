@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { signState, verifyState } from '../src/strava/state.js';
 
 test('signs and verifies Strava OAuth state', () => {

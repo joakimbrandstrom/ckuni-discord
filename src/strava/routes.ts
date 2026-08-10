@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { config, getStravaConfig, requireStravaConfig, stravaConfigured } from '../config.js';
 import {
+  disconnectAthlete,
   exchangeCode,
   handleActivityWebhook,
   saveConnection,
-  disconnectAthlete,
 } from './service.js';
 import { signState, verifyState } from './state.js';
 

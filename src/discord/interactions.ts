@@ -1,9 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { config } from '../config.js';
-import { verifyDiscordSignature } from './signature.js';
-import type { DiscordInteraction, DiscordOption, DiscordUser } from './types.js';
-import { createScheduledEvent, cancelScheduledEvent } from './api.js';
-import { isRideManager } from './auth.js';
+import { rideMessage } from '../rides/card.js';
 import {
   cancelRide,
   createRide,
@@ -16,8 +13,11 @@ import {
   upsertUser,
 } from '../rides/repository.js';
 import { parseLocalRideStart } from '../rides/time.js';
-import { rideMessage } from '../rides/card.js';
 import { createStravaConnectUrl } from '../strava/routes.js';
+import { cancelScheduledEvent, createScheduledEvent } from './api.js';
+import { isRideManager } from './auth.js';
+import { verifyDiscordSignature } from './signature.js';
+import type { DiscordInteraction, DiscordOption, DiscordUser } from './types.js';
 
 const EPHEMERAL = 1 << 6;
 

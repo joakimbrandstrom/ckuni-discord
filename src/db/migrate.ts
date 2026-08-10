@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { pool } from './pool.js';
 import type { Pool } from 'pg';
+import { pool } from './pool.js';
 
 export async function migrate(
   database: Pool = pool,

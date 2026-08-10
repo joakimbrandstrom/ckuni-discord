@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
+import { config } from './config.js';
 import { pool } from './db/pool.js';
 import { sendChannelMessage } from './discord/api.js';
-import { config } from './config.js';
 import { needs24hReminder, needs30mReminder } from './rides/reminder-thresholds.js';
 
 type ReminderRide = {
