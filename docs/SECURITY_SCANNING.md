@@ -11,6 +11,10 @@ Two Trivy checks run automatically:
 
 Both checks fail on `HIGH` or `CRITICAL` findings; for vulnerability findings, only items with available fixes are considered.
 
+On pull requests, the workflow also creates (or updates) a short comment with the
+number of fixable CVE findings at each severity. The same table is always written
+to the workflow run summary, including for scheduled and manually triggered scans.
+
 ## SonarQube
 
 The SonarQube job uses the official SonarSource GitHub Action. Create the project in SonarQube first, then configure these GitHub repository settings:
