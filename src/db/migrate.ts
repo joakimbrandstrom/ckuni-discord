@@ -1,9 +1,12 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { pool } from './pool.js';
 import type { Pool } from 'pg';
+import { pool } from './pool.js';
 
-export async function migrate(database: Pool = pool, migrationsDir = resolve(process.cwd(), 'migrations')): Promise<void> {
+export async function migrate(
+  database: Pool = pool,
+  migrationsDir = resolve(process.cwd(), 'migrations'),
+): Promise<void> {
   const client = await database.connect();
   try {
     await client.query(`
@@ -16,10 +19,9 @@ export async function migrate(database: Pool = pool, migrationsDir = resolve(pro
     const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
 
     for (const filename of files) {
-      const already = await client.query(
-        'SELECT 1 FROM schema_migrations WHERE filename = $1',
-        [filename]
-      );
+      const already = await client.query('SELECT 1 FROM schema_migrations WHERE filename = $1', [
+        filename,
+      ]);
       if (already.rowCount) continue;
 
       const sql = await readFile(resolve(migrationsDir, filename), 'utf8');

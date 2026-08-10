@@ -170,6 +170,12 @@ jobs:
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       TEST_DATABASE_URL: postgres://ckuni:test-password@127.0.0.1:5432/ckuni_test
+      PUBLIC_BASE_URL: https://strava-integration.example.test
+      STRAVA_CLIENT_ID: test-strava-client-id
+      STRAVA_CLIENT_SECRET: test-strava-client-secret
+      STRAVA_VERIFY_TOKEN: test-strava-verify-token
+      STRAVA_STATE_SECRET: test-strava-state-secret
+      TOKEN_ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -195,3 +201,7 @@ jobs:
 
       - name: SonarQube scan
         uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+        with:
+          args: >-
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300

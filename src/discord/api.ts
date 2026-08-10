@@ -8,8 +8,8 @@ async function discordFetch(path: string, init: RequestInit): Promise<Response> 
     headers: {
       Authorization: `Bot ${config.DISCORD_BOT_TOKEN}`,
       'Content-Type': 'application/json',
-      ...init.headers
-    }
+      ...init.headers,
+    },
   });
 
   if (!response.ok) {
@@ -22,7 +22,7 @@ async function discordFetch(path: string, init: RequestInit): Promise<Response> 
 export async function registerGuildCommands(commands: unknown[]): Promise<void> {
   await discordFetch(
     `/applications/${config.DISCORD_APPLICATION_ID}/guilds/${config.DISCORD_GUILD_ID}/commands`,
-    { method: 'PUT', body: JSON.stringify(commands) }
+    { method: 'PUT', body: JSON.stringify(commands) },
   );
 }
 
@@ -42,8 +42,8 @@ export async function createScheduledEvent(input: {
       entity_type: 3,
       scheduled_start_time: input.startsAt.toISOString(),
       scheduled_end_time: input.endsAt.toISOString(),
-      entity_metadata: { location: input.location.slice(0, 100) }
-    })
+      entity_metadata: { location: input.location.slice(0, 100) },
+    }),
   });
   const event = (await response.json()) as { id: string };
   return event.id;
@@ -51,13 +51,13 @@ export async function createScheduledEvent(input: {
 
 export async function cancelScheduledEvent(eventId: string): Promise<void> {
   await discordFetch(`/guilds/${config.DISCORD_GUILD_ID}/scheduled-events/${eventId}`, {
-    method: 'DELETE'
+    method: 'DELETE',
   });
 }
 
 export async function sendChannelMessage(channelId: string, payload: unknown): Promise<void> {
   await discordFetch(`/channels/${channelId}/messages`, {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 }

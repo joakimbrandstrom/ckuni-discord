@@ -1,6 +1,6 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import test from 'node:test';
 import { decryptToken, encryptToken } from '../src/strava/crypto.js';
 
 test('encrypts and decrypts tokens', () => {

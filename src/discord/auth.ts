@@ -9,7 +9,7 @@ import type { DiscordInteraction } from './types.js';
 export function isRideManager(
   interaction: DiscordInteraction,
   rideLeaderRoleId: string | undefined,
-  adminRoleId: string | undefined
+  adminRoleId: string | undefined,
 ): boolean {
   if (!rideLeaderRoleId && !adminRoleId) return true;
   const memberRoles = interaction.member?.roles ?? [];

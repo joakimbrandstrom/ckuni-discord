@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { needs24hReminder, needs30mReminder } from '../src/rides/reminder-thresholds.js';
 
 // ── 24h reminder ────────────────────────────────────────────────────────────

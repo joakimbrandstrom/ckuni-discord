@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { isRideManager } from '../src/discord/auth.js';
 import type { DiscordInteraction } from '../src/discord/types.js';
 
@@ -9,7 +9,7 @@ function makeInteraction(roles: string[]): DiscordInteraction {
     type: 2,
     token: 'tok',
     application_id: 'app',
-    member: { user: { id: 'u1', username: 'rider' }, roles }
+    member: { user: { id: 'u1', username: 'rider' }, roles },
   };
 }
 
@@ -86,7 +86,7 @@ test('restricted: denies DM interactions (no member)', () => {
     type: 2,
     token: 'tok',
     application_id: 'app',
-    user: { id: 'u1', username: 'rider' }
+    user: { id: 'u1', username: 'rider' },
   };
   assert.equal(isRideManager(interaction, LEADER_ROLE, ADMIN_ROLE), false);
 });

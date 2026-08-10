@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { parseLocalRideStart } from '../src/rides/time.js';
 
 test('parses Stockholm local ride time to UTC', () => {

@@ -1,5 +1,5 @@
-import { commands } from './commands.js';
 import { registerGuildCommands } from './api.js';
+import { commands } from './commands.js';
 
 try {
   await registerGuildCommands(commands);

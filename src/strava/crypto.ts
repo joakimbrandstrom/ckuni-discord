@@ -23,7 +23,7 @@ export function decryptToken(value: string, keyBase64: string): string {
   decipher.setAuthTag(Buffer.from(tagRaw, 'base64url'));
   const decrypted = Buffer.concat([
     decipher.update(Buffer.from(encryptedRaw, 'base64url')),
-    decipher.final()
+    decipher.final(),
   ]);
   return decrypted.toString('utf8');
 }
