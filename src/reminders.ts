@@ -16,14 +16,16 @@ type ReminderRide = {
 let running = false;
 
 async function sendReminder(ride: ReminderRide, kind: '24h' | '30m'): Promise<void> {
-  const local = DateTime.fromJSDate(new Date(ride.starts_at), { zone: 'utc' }).setZone(config.TIMEZONE);
+  const local = DateTime.fromJSDate(new Date(ride.starts_at), {
+    zone: 'utc',
+  }).setZone(config.TIMEZONE);
   const when = kind === '24h' ? 'tomorrow' : 'in 30 minutes';
   await sendChannelMessage(ride.discord_channel_id, {
-    content: `🔔 **${ride.title}** starts ${when} — ${local.toFormat('HH:mm')}. Use the ride card to join.`
+    content: `🔔 **${ride.title}** starts ${when} — ${local.toFormat('HH:mm')}. Use the ride card to join.`,
   });
   await pool.query(
     `UPDATE rides SET ${kind === '24h' ? 'reminder_24h_sent' : 'reminder_30m_sent'} = TRUE WHERE id = $1`,
-    [ride.id]
+    [ride.id],
   );
 }
 
@@ -36,7 +38,7 @@ async function tick(): Promise<void> {
        FROM rides
        WHERE status = 'scheduled'
          AND starts_at > NOW()
-         AND starts_at < NOW() + INTERVAL '25 hours'`
+         AND starts_at < NOW() + INTERVAL '25 hours'`,
     );
 
     const now = Date.now();

@@ -1,7 +1,7 @@
-import { config } from '../config.js';
+import { config, requireStravaConfig } from '../config.js';
 import { pool } from '../db/pool.js';
-import { decryptToken, encryptToken } from './crypto.js';
 import { markAttendance } from '../rides/repository.js';
+import { decryptToken, encryptToken } from './crypto.js';
 
 type TokenResponse = {
   access_token: string;
@@ -23,33 +23,38 @@ type StravaConnection = {
 export type Fetch = typeof globalThis.fetch;
 
 export async function exchangeCode(code: string, fetchImpl: Fetch = fetch): Promise<TokenResponse> {
+  const credentials = requireStravaConfig();
   const body = new URLSearchParams({
-    client_id: config.STRAVA_CLIENT_ID!,
-    client_secret: config.STRAVA_CLIENT_SECRET!,
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret,
     code,
-    grant_type: 'authorization_code'
+    grant_type: 'authorization_code',
   });
   const response = await fetchImpl('https://www.strava.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body
+    body,
   });
   if (!response.ok) throw new Error(`Strava token exchange failed: ${response.status}`);
   return (await response.json()) as TokenResponse;
 }
 
-async function refreshConnection(connection: StravaConnection, fetchImpl: Fetch): Promise<{ token: string; expiresAt: number }> {
-  const refreshToken = decryptToken(connection.refresh_token_enc, config.TOKEN_ENCRYPTION_KEY!);
+async function refreshConnection(
+  connection: StravaConnection,
+  fetchImpl: Fetch,
+): Promise<{ token: string; expiresAt: number }> {
+  const credentials = requireStravaConfig();
+  const refreshToken = decryptToken(connection.refresh_token_enc, credentials.tokenEncryptionKey);
   const body = new URLSearchParams({
-    client_id: config.STRAVA_CLIENT_ID!,
-    client_secret: config.STRAVA_CLIENT_SECRET!,
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret,
     grant_type: 'refresh_token',
-    refresh_token: refreshToken
+    refresh_token: refreshToken,
   });
   const response = await fetchImpl('https://www.strava.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body
+    body,
   });
   if (!response.ok) throw new Error(`Strava token refresh failed: ${response.status}`);
   const token = (await response.json()) as Omit<TokenResponse, 'athlete'>;
@@ -59,15 +64,16 @@ async function refreshConnection(connection: StravaConnection, fetchImpl: Fetch)
      WHERE discord_id=$1`,
     [
       connection.discord_id,
-      encryptToken(token.access_token, config.TOKEN_ENCRYPTION_KEY!),
-      encryptToken(token.refresh_token, config.TOKEN_ENCRYPTION_KEY!),
-      token.expires_at
-    ]
+      encryptToken(token.access_token, credentials.tokenEncryptionKey),
+      encryptToken(token.refresh_token, credentials.tokenEncryptionKey),
+      token.expires_at,
+    ],
   );
   return { token: token.access_token, expiresAt: token.expires_at };
 }
 
 export async function saveConnection(discordId: string, token: TokenResponse): Promise<void> {
+  const credentials = requireStravaConfig();
   await pool.query(
     `INSERT INTO strava_connections(
        discord_id, athlete_id, access_token_enc, refresh_token_enc, expires_at, scope
@@ -82,36 +88,40 @@ export async function saveConnection(discordId: string, token: TokenResponse): P
     [
       discordId,
       token.athlete.id,
-      encryptToken(token.access_token, config.TOKEN_ENCRYPTION_KEY!),
-      encryptToken(token.refresh_token, config.TOKEN_ENCRYPTION_KEY!),
+      encryptToken(token.access_token, credentials.tokenEncryptionKey),
+      encryptToken(token.refresh_token, credentials.tokenEncryptionKey),
       token.expires_at,
-      token.scope ?? null
-    ]
+      token.scope ?? null,
+    ],
   );
 }
 
 async function connectionByAthlete(athleteId: number): Promise<StravaConnection | null> {
   const result = await pool.query<StravaConnection>(
     'SELECT * FROM strava_connections WHERE athlete_id=$1',
-    [athleteId]
+    [athleteId],
   );
   return result.rows[0] ?? null;
 }
 
 async function validAccessToken(connection: StravaConnection, fetchImpl: Fetch): Promise<string> {
   if (Number(connection.expires_at) > Math.floor(Date.now() / 1000) + 120) {
-    return decryptToken(connection.access_token_enc, config.TOKEN_ENCRYPTION_KEY!);
+    return decryptToken(connection.access_token_enc, requireStravaConfig().tokenEncryptionKey);
   }
   return (await refreshConnection(connection, fetchImpl)).token;
 }
 
-export async function handleActivityWebhook(ownerId: number, activityId: number, fetchImpl: Fetch = fetch): Promise<void> {
+export async function handleActivityWebhook(
+  ownerId: number,
+  activityId: number,
+  fetchImpl: Fetch = fetch,
+): Promise<void> {
   const connection = await connectionByAthlete(ownerId);
   if (!connection) return;
   const accessToken = await validAccessToken(connection, fetchImpl);
 
   const response = await fetchImpl(`${config.STRAVA_API_BASE_URL}/activities/${activityId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) throw new Error(`Strava activity fetch failed: ${response.status}`);
   const activity = (await response.json()) as {
@@ -138,7 +148,7 @@ export async function handleActivityWebhook(ownerId: number, activityId: number,
          AND ABS(EXTRACT(EPOCH FROM (r.starts_at - $2::timestamptz))) <= 1800
        ORDER BY ABS(EXTRACT(EPOCH FROM (r.starts_at - $2::timestamptz))) ASC
        LIMIT 1`,
-      [connection.discord_id, start]
+      [connection.discord_id, start],
     );
     rideId = match.rows[0]?.id ?? null;
   }
@@ -166,8 +176,8 @@ export async function handleActivityWebhook(ownerId: number, activityId: number,
       activity.distance ?? null,
       activity.moving_time ?? null,
       activity.total_elevation_gain ?? null,
-      activity.average_watts ?? null
-    ]
+      activity.average_watts ?? null,
+    ],
   );
 
   if (rideId) await markAttendance(rideId, connection.discord_id);

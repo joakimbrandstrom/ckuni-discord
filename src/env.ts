@@ -10,7 +10,4 @@ export function blankToUndefined(value: unknown): unknown {
   return value;
 }
 
-export const optionalNonEmpty = z.preprocess(
-  blankToUndefined,
-  z.string().trim().min(1).optional()
-);
+export const optionalNonEmpty = z.preprocess(blankToUndefined, z.string().trim().min(1).optional());

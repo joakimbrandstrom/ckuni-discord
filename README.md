@@ -240,8 +240,14 @@ Run checks:
 npm test
 npm run coverage
 npm run typecheck
+npm run check
 npm run build
 ```
+
+Run `npm run format` to apply Biome formatting and safe lint fixes. Mutation testing is
+available through `npm run mutation`; its HTML report is written to `reports/mutation/`. The
+focused mutation suite covers deterministic ride, authorization, state-signing, and encryption
+logic and runs weekly or on demand in GitHub Actions rather than blocking every pull request.
 
 The test suite uses Node's built-in test runner through `tsx`. HTTP tests use
 `Fastify.inject()`, so they do not open a network port. PostgreSQL integration
