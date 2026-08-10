@@ -9,9 +9,12 @@ process.env.DISCORD_APPLICATION_ID ??= 'application';
 process.env.DISCORD_PUBLIC_KEY ??= '00'.repeat(32);
 process.env.DISCORD_BOT_TOKEN ??= 'token';
 process.env.DISCORD_GUILD_ID ??= 'guild';
-process.env.TOKEN_ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString('base64');
-process.env.STRAVA_CLIENT_ID ??= 'client';
-process.env.STRAVA_CLIENT_SECRET ??= 'secret';
+process.env.PUBLIC_BASE_URL = 'https://strava-integration.example.test';
+process.env.STRAVA_CLIENT_ID = 'test-strava-client-id';
+process.env.STRAVA_CLIENT_SECRET = 'test-strava-client-secret';
+process.env.STRAVA_VERIFY_TOKEN = 'test-strava-verify-token';
+process.env.STRAVA_STATE_SECRET = 'test-strava-state-secret';
+process.env.TOKEN_ENCRYPTION_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=';
 
 let db: typeof import('../../src/db/pool.js');
 let rides: typeof import('../../src/rides/repository.js');
