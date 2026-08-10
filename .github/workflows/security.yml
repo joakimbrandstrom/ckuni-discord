@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -20,6 +21,12 @@ jobs:
     name: Trivy repository scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      critical: ${{ steps.cves.outputs.critical }}
+      high: ${{ steps.cves.outputs.high }}
+      medium: ${{ steps.cves.outputs.medium }}
+      low: ${{ steps.cves.outputs.low }}
+      unknown: ${{ steps.cves.outputs.unknown }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -32,15 +39,31 @@ jobs:
           scan-type: fs
           scan-ref: .
           scanners: vuln,secret,misconfig
-          severity: HIGH,CRITICAL
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
           ignore-unfixed: true
-          format: table
-          exit-code: "1"
+          format: json
+          output: trivy-repository.json
+          exit-code: "0"
+
+      - name: Count CVE findings and enforce severity threshold
+        id: cves
+        run: |
+          for severity in critical high medium low unknown; do
+            count=$(jq --arg severity "${severity^^}" '[.Results[]?.Vulnerabilities[]? | select(.Severity == $severity)] | length' trivy-repository.json)
+            echo "$severity=$count" >> "$GITHUB_OUTPUT"
+          done
+          test "$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL")] | length' trivy-repository.json)" -eq 0
 
   trivy-image:
     name: Trivy container image scan
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      critical: ${{ steps.cves.outputs.critical }}
+      high: ${{ steps.cves.outputs.high }}
+      medium: ${{ steps.cves.outputs.medium }}
+      low: ${{ steps.cves.outputs.low }}
+      unknown: ${{ steps.cves.outputs.unknown }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -56,10 +79,74 @@ jobs:
           scan-type: image
           image-ref: ckuni-discord:ci
           scanners: vuln
-          severity: HIGH,CRITICAL
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
           ignore-unfixed: true
-          format: table
-          exit-code: "1"
+          format: json
+          output: trivy-image.json
+          exit-code: "0"
+
+      - name: Count CVE findings and enforce severity threshold
+        id: cves
+        run: |
+          for severity in critical high medium low unknown; do
+            count=$(jq --arg severity "${severity^^}" '[.Results[]?.Vulnerabilities[]? | select(.Severity == $severity)] | length' trivy-image.json)
+            echo "$severity=$count" >> "$GITHUB_OUTPUT"
+          done
+          test "$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL")] | length' trivy-image.json)" -eq 0
+
+  trivy-summary:
+    name: Trivy CVE summary
+    if: ${{ always() }}
+    needs: [trivy-repository, trivy-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      REPOSITORY_CRITICAL: ${{ needs.trivy-repository.outputs.critical || 0 }}
+      REPOSITORY_HIGH: ${{ needs.trivy-repository.outputs.high || 0 }}
+      REPOSITORY_MEDIUM: ${{ needs.trivy-repository.outputs.medium || 0 }}
+      REPOSITORY_LOW: ${{ needs.trivy-repository.outputs.low || 0 }}
+      REPOSITORY_UNKNOWN: ${{ needs.trivy-repository.outputs.unknown || 0 }}
+      IMAGE_CRITICAL: ${{ needs.trivy-image.outputs.critical || 0 }}
+      IMAGE_HIGH: ${{ needs.trivy-image.outputs.high || 0 }}
+      IMAGE_MEDIUM: ${{ needs.trivy-image.outputs.medium || 0 }}
+      IMAGE_LOW: ${{ needs.trivy-image.outputs.low || 0 }}
+      IMAGE_UNKNOWN: ${{ needs.trivy-image.outputs.unknown || 0 }}
+    steps:
+      - name: Create CVE summary
+        run: |
+          total() { echo $(($1 + $2)); }
+          {
+            echo '<!-- trivy-cve-summary -->'
+            echo '## Trivy CVE summary'
+            echo
+            echo '| Severity | Repository | Container image | Total |'
+            echo '| --- | ---: | ---: | ---: |'
+            echo "| Critical | $REPOSITORY_CRITICAL | $IMAGE_CRITICAL | $(total "$REPOSITORY_CRITICAL" "$IMAGE_CRITICAL") |"
+            echo "| High | $REPOSITORY_HIGH | $IMAGE_HIGH | $(total "$REPOSITORY_HIGH" "$IMAGE_HIGH") |"
+            echo "| Medium | $REPOSITORY_MEDIUM | $IMAGE_MEDIUM | $(total "$REPOSITORY_MEDIUM" "$IMAGE_MEDIUM") |"
+            echo "| Low | $REPOSITORY_LOW | $IMAGE_LOW | $(total "$REPOSITORY_LOW" "$IMAGE_LOW") |"
+            echo "| Unknown | $REPOSITORY_UNKNOWN | $IMAGE_UNKNOWN | $(total "$REPOSITORY_UNKNOWN" "$IMAGE_UNKNOWN") |"
+            echo
+            echo '_Only vulnerabilities with an available fix are included._'
+          } > trivy-summary.md
+          cat trivy-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Add summary to pull request
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          comment_id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.body | contains("<!-- trivy-cve-summary -->")) | .id' | head -n 1)
+
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              --raw-field body="$(cat trivy-summary.md)"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              --raw-field body="$(cat trivy-summary.md)"
+          fi
 
   sonarqube:
     name: SonarQube scan
