@@ -22,7 +22,7 @@ const schema = z.object({
   STRAVA_VERIFY_TOKEN: optionalNonEmpty,
   STRAVA_STATE_SECRET: optionalNonEmpty,
   TOKEN_ENCRYPTION_KEY: optionalNonEmpty,
-  STRAVA_API_BASE_URL: z.string().url().default('https://www.strava.com/api/v3')
+  STRAVA_API_BASE_URL: z.string().url().default('https://www.strava.com/api/v3'),
 });
 
 export const config = schema.parse(process.env);
@@ -30,10 +30,10 @@ export const config = schema.parse(process.env);
 export function stravaConfigured(): boolean {
   return Boolean(
     config.PUBLIC_BASE_URL &&
-      config.STRAVA_CLIENT_ID &&
-      config.STRAVA_CLIENT_SECRET &&
-      config.STRAVA_VERIFY_TOKEN &&
-      config.STRAVA_STATE_SECRET &&
-      config.TOKEN_ENCRYPTION_KEY
+    config.STRAVA_CLIENT_ID &&
+    config.STRAVA_CLIENT_SECRET &&
+    config.STRAVA_VERIFY_TOKEN &&
+    config.STRAVA_STATE_SECRET &&
+    config.TOKEN_ENCRYPTION_KEY,
   );
 }

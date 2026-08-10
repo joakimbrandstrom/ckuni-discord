@@ -18,9 +18,9 @@
     "test:integration": "tsx --test --test-concurrency=1 $(find test/integration -name '*.test.ts' -print)",
     "coverage": "c8 --reporter=text --reporter=lcov --all --src=src --extension=.ts --exclude-after-remap --check-coverage --lines=70 --branches=70 --functions=70 --statements=70 tsx --test --test-concurrency=1 $(find test -name '*.test.ts' -print)",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "npx --yes @biomejs/biome@2.2.2 check .",
-    "format": "npx --yes @biomejs/biome@2.2.2 format --write .",
-    "mutation": "npx --yes @stryker-mutator/core@9.0.1 run"
+    "check": "biome check .",
+    "format": "biome check --write .",
+    "mutation": "stryker run"
   },
   "dependencies": {
     "fastify": "^5.0.0",
@@ -29,6 +29,8 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.2.2",
+    "@stryker-mutator/core": "9.0.1",
     "@types/luxon": "^3.0.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.0.0",

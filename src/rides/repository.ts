@@ -20,7 +20,7 @@ export async function upsertUser(discordId: string, displayName: string): Promis
      VALUES ($1, $2)
      ON CONFLICT (discord_id)
      DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = NOW()`,
-    [discordId, displayName]
+    [discordId, displayName],
   );
 }
 
@@ -48,8 +48,8 @@ export async function createRide(input: {
       input.durationMinutes,
       input.zwiftUrl ?? null,
       input.creatorDiscordId,
-      input.channelId
-    ]
+      input.channelId,
+    ],
   );
   return result.rows[0];
 }
@@ -69,7 +69,7 @@ export async function listUpcomingRides(limit = 10): Promise<Ride[]> {
      WHERE status = 'scheduled' AND starts_at >= NOW() - INTERVAL '30 minutes'
      ORDER BY starts_at ASC
      LIMIT $1`,
-    [limit]
+    [limit],
   );
   return result.rows;
 }
@@ -79,7 +79,7 @@ export async function cancelRide(rideId: string, creatorDiscordId: string): Prom
     `UPDATE rides SET status = 'cancelled'
      WHERE id = $1 AND creator_discord_id = $2 AND status = 'scheduled'
      RETURNING *`,
-    [rideId, creatorDiscordId]
+    [rideId, creatorDiscordId],
   );
   return result.rows[0] ?? null;
 }
@@ -87,14 +87,14 @@ export async function cancelRide(rideId: string, creatorDiscordId: string): Prom
 export async function setParticipant(
   rideId: string,
   discordId: string,
-  status: 'going' | 'maybe' | 'declined'
+  status: 'going' | 'maybe' | 'declined',
 ): Promise<void> {
   await pool.query(
     `INSERT INTO ride_participants(ride_id, discord_id, status)
      VALUES ($1, $2, $3)
      ON CONFLICT (ride_id, discord_id)
      DO UPDATE SET status = EXCLUDED.status, updated_at = NOW()`,
-    [rideId, discordId, status]
+    [rideId, discordId, status],
   );
 }
 
@@ -104,7 +104,7 @@ export async function participantCounts(rideId: string): Promise<{ going: number
      FROM ride_participants
      WHERE ride_id = $1 AND status IN ('going', 'maybe')
      GROUP BY status`,
-    [rideId]
+    [rideId],
   );
   let going = 0;
   let maybe = 0;
@@ -121,12 +121,18 @@ export async function markAttendance(rideId: string, discordId: string): Promise
      VALUES ($1, $2, 'going', NOW())
      ON CONFLICT (ride_id, discord_id)
      DO UPDATE SET attended_at = NOW(), status = 'going', updated_at = NOW()`,
-    [rideId, discordId]
+    [rideId, discordId],
   );
 }
 
-export async function getLeaderboard(limit = 10): Promise<Array<{ display_name: string; rides: string; points: string }>> {
-  const result = await pool.query<{ display_name: string; rides: string; points: string }>(
+export async function getLeaderboard(
+  limit = 10,
+): Promise<Array<{ display_name: string; rides: string; points: string }>> {
+  const result = await pool.query<{
+    display_name: string;
+    rides: string;
+    points: string;
+  }>(
     `SELECT u.display_name,
             COUNT(*)::text AS rides,
             (COUNT(*) * 10)::text AS points
@@ -136,7 +142,7 @@ export async function getLeaderboard(limit = 10): Promise<Array<{ display_name: 
      GROUP BY u.discord_id, u.display_name
      ORDER BY COUNT(*) DESC, u.display_name ASC
      LIMIT $1`,
-    [limit]
+    [limit],
   );
   return result.rows;
 }

@@ -13,15 +13,10 @@ export function verifyDiscordSignature(args: {
     const key = createPublicKey({
       key: Buffer.concat([ED25519_SPKI_PREFIX, Buffer.from(publicKeyHex, 'hex')]),
       format: 'der',
-      type: 'spki'
+      type: 'spki',
     });
 
-    return verify(
-      null,
-      Buffer.from(timestamp + rawBody),
-      key,
-      Buffer.from(signatureHex, 'hex')
-    );
+    return verify(null, Buffer.from(timestamp + rawBody), key, Buffer.from(signatureHex, 'hex'));
   } catch {
     return false;
   }

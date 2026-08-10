@@ -13,7 +13,7 @@ import {
   participantCounts,
   setDiscordEventId,
   setParticipant,
-  upsertUser
+  upsertUser,
 } from '../rides/repository.js';
 import { parseLocalRideStart } from '../rides/time.js';
 import { rideMessage } from '../rides/card.js';
@@ -41,8 +41,27 @@ function findSubcommand(options: DiscordOption[] | undefined): DiscordOption | u
   return options?.find((option) => option.type === 1);
 }
 
-function value<T extends string | number>(options: DiscordOption[] | undefined, name: string): T | undefined {
+function value<T extends string | number>(
+  options: DiscordOption[] | undefined,
+  name: string,
+): T | undefined {
   return options?.find((option) => option.name === name)?.value as T | undefined;
+}
+
+function requiredString(options: DiscordOption[] | undefined, name: string): string {
+  const optionValue = value<string>(options, name);
+  if (typeof optionValue !== 'string' || optionValue.length === 0) {
+    throw new Error(`Missing required ride option: ${name}`);
+  }
+  return optionValue;
+}
+
+function requiredNumber(options: DiscordOption[] | undefined, name: string): number {
+  const optionValue = value<number>(options, name);
+  if (typeof optionValue !== 'number' || !Number.isFinite(optionValue)) {
+    throw new Error(`Missing required ride option: ${name}`);
+  }
+  return optionValue;
 }
 
 function scheduledEventLocation(zwiftUrl: string | undefined, rideType: string): string {
@@ -54,18 +73,19 @@ function scheduledEventLocation(zwiftUrl: string | undefined, rideType: string):
 async function handleCreateRide(
   user: DiscordUser,
   channelId: string,
-  sub: DiscordOption
+  sub: DiscordOption,
 ): Promise<Record<string, unknown>> {
   try {
-    const title = value<string>(sub.options, 'title')!;
-    const date = value<string>(sub.options, 'date')!;
-    const time = value<string>(sub.options, 'time')!;
-    const duration = value<number>(sub.options, 'duration')!;
-    const rideType = value<string>(sub.options, 'type')!;
+    const title = requiredString(sub.options, 'title');
+    const date = requiredString(sub.options, 'date');
+    const time = requiredString(sub.options, 'time');
+    const duration = requiredNumber(sub.options, 'duration');
+    const rideType = requiredString(sub.options, 'type');
     const zwiftUrl = value<string>(sub.options, 'zwift_url');
     const description = value<string>(sub.options, 'description');
     const startsAt = parseLocalRideStart(date, time, config.TIMEZONE);
-    if (startsAt.getTime() < Date.now() - 60_000) return ephemeral('Ride start time must be in the future.');
+    if (startsAt.getTime() < Date.now() - 60_000)
+      return ephemeral('Ride start time must be in the future.');
 
     const ride = await createRide({
       title,
@@ -75,7 +95,7 @@ async function handleCreateRide(
       durationMinutes: duration,
       zwiftUrl,
       creatorDiscordId: user.id,
-      channelId
+      channelId,
     });
     await setParticipant(ride.id, user.id, 'going');
     const counts = await participantCounts(ride.id);
@@ -87,7 +107,7 @@ async function handleCreateRide(
         description,
         startsAt,
         endsAt,
-        location: scheduledEventLocation(zwiftUrl, rideType)
+        location: scheduledEventLocation(zwiftUrl, rideType),
       })
         .then((eventId) => setDiscordEventId(ride.id, eventId))
         .catch((error) => console.error('Failed to create scheduled event:', error));
@@ -104,13 +124,20 @@ async function handleListRides(): Promise<Record<string, unknown>> {
   const rides = await listUpcomingRides();
   if (!rides.length) return ephemeral('No upcoming CK UNI rides found.');
   const lines = rides.map((ride) => {
-    const start = new Date(ride.starts_at).toLocaleString('sv-SE', { timeZone: config.TIMEZONE, dateStyle: 'short', timeStyle: 'short' });
+    const start = new Date(ride.starts_at).toLocaleString('sv-SE', {
+      timeZone: config.TIMEZONE,
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
     return `**#${ride.id}** — ${ride.title} — ${start}`;
   });
   return ephemeral(`### Upcoming CK UNI rides\n${lines.join('\n')}`);
 }
 
-async function handleCancelRide(user: DiscordUser, sub: DiscordOption): Promise<Record<string, unknown>> {
+async function handleCancelRide(
+  user: DiscordUser,
+  sub: DiscordOption,
+): Promise<Record<string, unknown>> {
   const id = String(value<number>(sub.options, 'id'));
   const ride = await cancelRide(id, user.id);
   if (!ride) return ephemeral('Ride not found, already cancelled, or you are not the creator.');
@@ -122,21 +149,26 @@ async function handleCancelRide(user: DiscordUser, sub: DiscordOption): Promise<
 
 async function handleRide(interaction: DiscordInteraction): Promise<Record<string, unknown>> {
   const user = getUser(interaction);
-  if (!user || !interaction.channel_id) return ephemeral('This command must be used inside the CK UNI server.');
+  if (!user || !interaction.channel_id)
+    return ephemeral('This command must be used inside the CK UNI server.');
   await upsertUser(user.id, displayName(user));
 
   const sub = findSubcommand(interaction.data?.options);
   if (!sub) return ephemeral('Missing ride subcommand.');
 
   if (sub.name === 'create') {
-    if (!isRideManager(interaction, config.DISCORD_RIDE_LEADER_ROLE_ID, config.DISCORD_ADMIN_ROLE_ID)) {
+    if (
+      !isRideManager(interaction, config.DISCORD_RIDE_LEADER_ROLE_ID, config.DISCORD_ADMIN_ROLE_ID)
+    ) {
       return ephemeral('🚫 Only Ride Leaders and Admins can create rides.');
     }
     return handleCreateRide(user, interaction.channel_id, sub);
   }
   if (sub.name === 'list') return handleListRides();
   if (sub.name === 'cancel') {
-    if (!isRideManager(interaction, config.DISCORD_RIDE_LEADER_ROLE_ID, config.DISCORD_ADMIN_ROLE_ID)) {
+    if (
+      !isRideManager(interaction, config.DISCORD_RIDE_LEADER_ROLE_ID, config.DISCORD_ADMIN_ROLE_ID)
+    ) {
       return ephemeral('🚫 Only Ride Leaders and Admins can cancel rides.');
     }
     return handleCancelRide(user, sub);
@@ -171,24 +203,31 @@ async function handleCommand(interaction: DiscordInteraction): Promise<Record<st
 
   if (name === 'strava') {
     const url = createStravaConnectUrl(user.id);
-    if (!url) return ephemeral('Strava is not configured on the server yet. Discord rides work without it.');
+    if (!url)
+      return ephemeral(
+        'Strava is not configured on the server yet. Discord rides work without it.',
+      );
     return response({
       content: 'Connect your Strava account to CK UNI. This is optional and per-user.',
       flags: EPHEMERAL,
       components: [
         {
           type: 1,
-          components: [{ type: 2, style: 5, label: 'Connect with Strava', url }]
-        }
-      ]
+          components: [{ type: 2, style: 5, label: 'Connect with Strava', url }],
+        },
+      ],
     });
   }
 
   if (name === 'leaderboard') {
     const rows = await getLeaderboard();
     if (!rows.length) return ephemeral('No confirmed CK UNI ride attendance yet.');
-    const lines = rows.map((row, i) => `${i + 1}. **${row.display_name}** — ${row.points} pts (${row.rides} rides)`);
-    return response({ content: `🏆 **CK UNI participation leaderboard**\n${lines.join('\n')}` });
+    const lines = rows.map(
+      (row, i) => `${i + 1}. **${row.display_name}** — ${row.points} pts (${row.rides} rides)`,
+    );
+    return response({
+      content: `🏆 **CK UNI participation leaderboard**\n${lines.join('\n')}`,
+    });
   }
 
   return ephemeral('Unknown command.');
@@ -205,8 +244,16 @@ export async function registerDiscordInteractions(app: FastifyInstance): Promise
     const signature = header(request, 'x-signature-ed25519');
     const timestamp = header(request, 'x-signature-timestamp');
 
-    if (!rawBody || !signature || !timestamp) return reply.code(401).send({ error: 'Missing Discord signature' });
-    if (!verifyDiscordSignature({ publicKeyHex: config.DISCORD_PUBLIC_KEY, signatureHex: signature, timestamp, rawBody })) {
+    if (!rawBody || !signature || !timestamp)
+      return reply.code(401).send({ error: 'Missing Discord signature' });
+    if (
+      !verifyDiscordSignature({
+        publicKeyHex: config.DISCORD_PUBLIC_KEY,
+        signatureHex: signature,
+        timestamp,
+        rawBody,
+      })
+    ) {
       return reply.code(401).send({ error: 'Invalid Discord signature' });
     }
 

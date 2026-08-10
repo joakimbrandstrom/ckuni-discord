@@ -6,15 +6,17 @@ const icons: Record<string, string> = {
   intervals: '⚡',
   endurance: '🚴',
   race: '🏁',
-  outdoor: '🌤️'
+  outdoor: '🌤️',
 };
 
 export function rideMessage(
   ride: Ride,
   counts: { going: number; maybe: number },
-  timezone: string
+  timezone: string,
 ): Record<string, unknown> {
-  const local = DateTime.fromJSDate(new Date(ride.starts_at), { zone: 'utc' }).setZone(timezone);
+  const local = DateTime.fromJSDate(new Date(ride.starts_at), {
+    zone: 'utc',
+  }).setZone(timezone);
   const description = [
     ride.description || undefined,
     `📅 ${local.toFormat('ccc d LLL, HH:mm')}`,
@@ -23,7 +25,7 @@ export function rideMessage(
     ride.zwift_url ? `🎮 ${ride.zwift_url}` : undefined,
     '',
     `✅ Going: **${counts.going}**   🤔 Maybe: **${counts.maybe}**`,
-    `Ride ID: \`${ride.id}\``
+    `Ride ID: \`${ride.id}\``,
   ]
     .filter((line) => line !== undefined)
     .join('\n');
@@ -32,17 +34,27 @@ export function rideMessage(
     embeds: [
       {
         title: `🚴 ${ride.title}`,
-        description
-      }
+        description,
+      },
     ],
     components: [
       {
         type: 1,
         components: [
-          { type: 2, style: 3, label: 'Join', custom_id: `ride_join:${ride.id}` },
-          { type: 2, style: 2, label: 'Maybe', custom_id: `ride_maybe:${ride.id}` }
-        ]
-      }
-    ]
+          {
+            type: 2,
+            style: 3,
+            label: 'Join',
+            custom_id: `ride_join:${ride.id}`,
+          },
+          {
+            type: 2,
+            style: 2,
+            label: 'Maybe',
+            custom_id: `ride_maybe:${ride.id}`,
+          },
+        ],
+      },
+    ],
   };
 }

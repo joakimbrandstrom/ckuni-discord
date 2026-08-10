@@ -14,7 +14,7 @@ body.set('verify_token', config.STRAVA_VERIFY_TOKEN!);
 
 const response = await fetch('https://www.strava.com/api/v3/push_subscriptions', {
   method: 'POST',
-  body
+  body,
 });
 
 if (!response.ok) {
