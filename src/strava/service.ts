@@ -20,14 +20,16 @@ type StravaConnection = {
   scope: string | null;
 };
 
-export async function exchangeCode(code: string): Promise<TokenResponse> {
+export type Fetch = typeof globalThis.fetch;
+
+export async function exchangeCode(code: string, fetchImpl: Fetch = fetch): Promise<TokenResponse> {
   const body = new URLSearchParams({
     client_id: config.STRAVA_CLIENT_ID!,
     client_secret: config.STRAVA_CLIENT_SECRET!,
     code,
     grant_type: 'authorization_code'
   });
-  const response = await fetch('https://www.strava.com/oauth/token', {
+  const response = await fetchImpl('https://www.strava.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body
@@ -36,7 +38,7 @@ export async function exchangeCode(code: string): Promise<TokenResponse> {
   return (await response.json()) as TokenResponse;
 }
 
-async function refreshConnection(connection: StravaConnection): Promise<{ token: string; expiresAt: number }> {
+async function refreshConnection(connection: StravaConnection, fetchImpl: Fetch): Promise<{ token: string; expiresAt: number }> {
   const refreshToken = decryptToken(connection.refresh_token_enc, config.TOKEN_ENCRYPTION_KEY!);
   const body = new URLSearchParams({
     client_id: config.STRAVA_CLIENT_ID!,
@@ -44,7 +46,7 @@ async function refreshConnection(connection: StravaConnection): Promise<{ token:
     grant_type: 'refresh_token',
     refresh_token: refreshToken
   });
-  const response = await fetch('https://www.strava.com/oauth/token', {
+  const response = await fetchImpl('https://www.strava.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body
@@ -96,19 +98,19 @@ async function connectionByAthlete(athleteId: number): Promise<StravaConnection 
   return result.rows[0] ?? null;
 }
 
-async function validAccessToken(connection: StravaConnection): Promise<string> {
+async function validAccessToken(connection: StravaConnection, fetchImpl: Fetch): Promise<string> {
   if (Number(connection.expires_at) > Math.floor(Date.now() / 1000) + 120) {
     return decryptToken(connection.access_token_enc, config.TOKEN_ENCRYPTION_KEY!);
   }
-  return (await refreshConnection(connection)).token;
+  return (await refreshConnection(connection, fetchImpl)).token;
 }
 
-export async function handleActivityWebhook(ownerId: number, activityId: number): Promise<void> {
+export async function handleActivityWebhook(ownerId: number, activityId: number, fetchImpl: Fetch = fetch): Promise<void> {
   const connection = await connectionByAthlete(ownerId);
   if (!connection) return;
-  const accessToken = await validAccessToken(connection);
+  const accessToken = await validAccessToken(connection, fetchImpl);
 
-  const response = await fetch(`${config.STRAVA_API_BASE_URL}/activities/${activityId}`, {
+  const response = await fetchImpl(`${config.STRAVA_API_BASE_URL}/activities/${activityId}`, {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   if (!response.ok) throw new Error(`Strava activity fetch failed: ${response.status}`);

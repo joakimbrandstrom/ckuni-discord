@@ -14,8 +14,9 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "commands:register": "tsx src/discord/register-commands.ts",
     "strava:webhook:create": "tsx src/strava/create-webhook.ts",
-    "test": "tsx --test test/**/*.test.ts",
-    "coverage": "c8 --reporter=text --reporter=lcov --all --src=src --extension=.ts --exclude-after-remap tsx --test test/**/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 $(find test -name '*.test.ts' -print)",
+    "test:integration": "tsx --test --test-concurrency=1 $(find test/integration -name '*.test.ts' -print)",
+    "coverage": "c8 --reporter=text --reporter=lcov --all --src=src --extension=.ts --exclude-after-remap --check-coverage --lines=70 --branches=70 --functions=70 --statements=70 tsx --test --test-concurrency=1 $(find test -name '*.test.ts' -print)",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

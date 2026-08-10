@@ -4,8 +4,13 @@ import { pool } from './db/pool.js';
 import { registerDiscordInteractions } from './discord/interactions.js';
 import { registerStravaRoutes } from './strava/routes.js';
 
-export async function buildApp(): Promise<FastifyInstance> {
+export type AppOptions = {
+  readinessCheck?: () => Promise<unknown>;
+};
+
+export async function buildApp(options: AppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: { level: config.LOG_LEVEL } });
+  const readinessCheck = options.readinessCheck ?? (() => pool.query('SELECT 1'));
 
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (request, body, done) => {
     try {
@@ -20,7 +25,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_request, reply) => {
     try {
-      await pool.query('SELECT 1');
+      await readinessCheck();
       return { status: 'ready' };
     } catch {
       return reply.code(503).send({ status: 'not-ready' });
