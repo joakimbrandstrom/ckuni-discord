@@ -12,8 +12,14 @@ Object.assign(process.env, {
 const originalFetch = globalThis.fetch;
 const calls: Array<{ url: string; init?: RequestInit }> = [];
 
-const { cancelScheduledEvent, createScheduledEvent, registerGuildCommands, sendChannelMessage } =
-  await import('../src/discord/api.js');
+const {
+  cancelScheduledEvent,
+  createScheduledEvent,
+  editChannelMessage,
+  registerGuildCommands,
+  sendChannelMessage,
+  updateScheduledEvent,
+} = await import('../src/discord/api.js');
 
 beforeEach(() => {
   calls.length = 0;
@@ -64,7 +70,7 @@ test('createScheduledEvent normalizes Discord field limits and returns the event
 
 test('cancelScheduledEvent and sendChannelMessage use their expected Discord endpoints', async () => {
   await cancelScheduledEvent('event-123');
-  await sendChannelMessage('channel-123', { content: 'Reminder' });
+  assert.equal(await sendChannelMessage('channel-123', { content: 'Reminder' }), 'event-123');
 
   assert.deepEqual(
     calls.map(({ url, init }) => ({ url, method: init?.method, body: init?.body })),
@@ -78,6 +84,31 @@ test('cancelScheduledEvent and sendChannelMessage use their expected Discord end
         url: 'https://discord.com/api/v10/channels/channel-123/messages',
         method: 'POST',
         body: JSON.stringify({ content: 'Reminder' }),
+      },
+    ],
+  );
+});
+
+test('updates scheduled events and existing channel messages', async () => {
+  await updateScheduledEvent('event-123', {
+    name: 'Uppdaterat pass',
+    description: 'Nya uppgifter',
+    startsAt: new Date('2026-08-11T18:00:00.000Z'),
+    endsAt: new Date('2026-08-11T19:00:00.000Z'),
+    location: 'Zwift',
+  });
+  await editChannelMessage('channel-123', 'message-123', { content: 'Uppdaterat' });
+
+  assert.deepEqual(
+    calls.map(({ url, init }) => ({ url, method: init?.method })),
+    [
+      {
+        url: 'https://discord.com/api/v10/guilds/test-guild/scheduled-events/event-123',
+        method: 'PATCH',
+      },
+      {
+        url: 'https://discord.com/api/v10/channels/channel-123/messages/message-123',
+        method: 'PATCH',
       },
     ],
   );

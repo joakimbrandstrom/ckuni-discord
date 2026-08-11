@@ -59,7 +59,7 @@ export async function registerStravaRoutes(app: FastifyInstance): Promise<void> 
     return reply
       .type('text/html')
       .send(
-        '<!doctype html><meta charset="utf-8"><title>CK UNI</title><h1>Strava connected ✅</h1><p>You can close this window and return to Discord.</p>',
+        '<!doctype html><meta charset="utf-8"><title>CK UNI</title><h1>Strava är anslutet ✅</h1><p>Du kan stänga fönstret och återgå till Discord.</p>',
       );
   });
 

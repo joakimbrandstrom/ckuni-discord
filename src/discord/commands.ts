@@ -1,75 +1,85 @@
 export const commands = [
   {
     name: 'ping',
-    description: 'Check that CK UNI Bot is online',
+    description: 'Kontrollera att CK UNI-boten är online',
   },
   {
     name: 'ride',
-    description: 'Create and manage CK UNI rides',
+    description: 'Skapa och hantera CK UNI-pass',
     options: [
       {
         type: 1,
         name: 'create',
-        description: 'Create a CK UNI ride',
-        options: [
-          { type: 3, name: 'title', description: 'Ride title', required: true },
-          {
-            type: 3,
-            name: 'date',
-            description: 'Date as YYYY-MM-DD',
-            required: true,
-          },
-          {
-            type: 3,
-            name: 'time',
-            description: 'Local time as HH:mm',
-            required: true,
-          },
-          {
-            type: 4,
-            name: 'duration',
-            description: 'Duration in minutes',
-            required: true,
-            min_value: 15,
-            max_value: 600,
-          },
-          {
-            type: 3,
-            name: 'type',
-            description: 'Ride type',
-            required: true,
-            choices: [
-              { name: 'Social', value: 'social' },
-              { name: 'Intervals', value: 'intervals' },
-              { name: 'Endurance', value: 'endurance' },
-              { name: 'Race', value: 'race' },
-              { name: 'Outdoor', value: 'outdoor' },
-            ],
-          },
-          {
-            type: 3,
-            name: 'zwift_url',
-            description: 'Optional Zwift event URL',
-            required: false,
-          },
-          {
-            type: 3,
-            name: 'description',
-            description: 'Optional details',
-            required: false,
-          },
-        ],
+        description: 'Skapa ett CK UNI-pass',
       },
-      { type: 1, name: 'list', description: 'List upcoming CK UNI rides' },
+      { type: 1, name: 'list', description: 'Visa kommande CK UNI-pass' },
       {
         type: 1,
-        name: 'cancel',
-        description: 'Cancel a ride you created',
+        name: 'edit',
+        description: 'Redigera ett kommande CK UNI-pass',
         options: [
           {
             type: 4,
             name: 'id',
-            description: 'Ride ID',
+            description: 'Pass-ID',
+            required: true,
+            min_value: 1,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: 'cancel',
+        description: 'Ställ in ett pass som du har skapat',
+        options: [
+          {
+            type: 4,
+            name: 'id',
+            description: 'Pass-ID',
+            required: true,
+            min_value: 1,
+          },
+        ],
+      },
+      { type: 1, name: 'mall-spara', description: 'Spara en ny återanvändbar passmall' },
+      { type: 1, name: 'mall-lista', description: 'Visa sparade passmallar' },
+      {
+        type: 1,
+        name: 'mall-skapa',
+        description: 'Skapa nästa pass från en mall',
+        options: [
+          {
+            type: 4,
+            name: 'id',
+            description: 'Mall-ID',
+            required: true,
+            min_value: 1,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: 'mall-redigera',
+        description: 'Redigera en passmall',
+        options: [
+          {
+            type: 4,
+            name: 'id',
+            description: 'Mall-ID',
+            required: true,
+            min_value: 1,
+          },
+        ],
+      },
+      {
+        type: 1,
+        name: 'mall-inaktivera',
+        description: 'Inaktivera en passmall',
+        options: [
+          {
+            type: 4,
+            name: 'id',
+            description: 'Mall-ID',
             required: true,
             min_value: 1,
           },
@@ -79,11 +89,11 @@ export const commands = [
   },
   {
     name: 'strava',
-    description: 'Connect optional Strava activity data',
-    options: [{ type: 1, name: 'connect', description: 'Connect your Strava account' }],
+    description: 'Anslut valfria aktivitetsdata från Strava',
+    options: [{ type: 1, name: 'connect', description: 'Anslut ditt Strava-konto' }],
   },
   {
     name: 'leaderboard',
-    description: 'Show CK UNI participation leaderboard',
+    description: 'Visa CK UNI:s deltagartabell',
   },
 ];

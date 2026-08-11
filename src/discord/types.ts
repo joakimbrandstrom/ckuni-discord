@@ -24,6 +24,11 @@ export type DiscordInteraction = {
     name?: string;
     custom_id?: string;
     options?: DiscordOption[];
+    components?: Array<{
+      type: number;
+      components?: Array<{ type: number; custom_id?: string; value?: string }>;
+      component?: { type: number; custom_id?: string; value?: string };
+    }>;
   };
   message?: {
     id: string;

@@ -39,7 +39,7 @@ integration('migrations are repeatable', async () => {
   const result = await db.pool.query('SELECT filename FROM schema_migrations ORDER BY filename');
   assert.deepEqual(
     result.rows.map((row) => row.filename),
-    ['001_init.sql'],
+    ['001_init.sql', '002_ride_metadata_and_templates.sql'],
   );
 });
 
@@ -135,6 +135,53 @@ integration(
     );
   },
 );
+
+integration('ride templates are editable, disableable and prevent duplicate generated rides', async () => {
+  const suffix = String(Date.now());
+  await rides.upsertUser(`template-leader-${suffix}`, 'Mallansvarig');
+  const template = await rides.createRideTemplate({
+    name: `Tisdagsintervaller ${suffix}`,
+    title: 'Tisdagsintervaller',
+    description: 'Fyra block',
+    rideType: 'intervals',
+    durationMinutes: 60,
+    creatorDiscordId: `template-leader-${suffix}`,
+  });
+  assert.equal((await rides.getRideTemplate(template.id))?.active, true);
+
+  const updated = await rides.updateRideTemplate(template.id, {
+    name: `Tisdagsintervaller ${suffix}`,
+    title: 'Nya intervaller',
+    rideType: 'intervals',
+    durationMinutes: 75,
+  });
+  assert.equal(updated?.duration_minutes, 75);
+
+  const start = new Date(Date.now() + 86_400_000);
+  await rides.createRide({
+    title: updated?.title ?? 'Nya intervaller',
+    rideType: 'intervals',
+    startsAt: start,
+    durationMinutes: 75,
+    creatorDiscordId: `template-leader-${suffix}`,
+    channelId: 'channel',
+    templateId: template.id,
+  });
+  await assert.rejects(
+    () =>
+      rides.createRide({
+        title: 'Dubblett',
+        rideType: 'intervals',
+        startsAt: start,
+        durationMinutes: 75,
+        creatorDiscordId: `template-leader-${suffix}`,
+        channelId: 'channel',
+        templateId: template.id,
+      }),
+    (error: unknown) => (error as { code?: string }).code === '23505',
+  );
+  assert.equal((await rides.disableRideTemplate(template.id))?.active, false);
+});
 
 integration('expired Strava tokens refresh and API failures are surfaced', async () => {
   await db.pool.query('UPDATE strava_connections SET expires_at=0 WHERE athlete_id=42');
