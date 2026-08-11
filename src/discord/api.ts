@@ -2,33 +2,32 @@ import { config } from '../config.js';
 
 const API_BASE = 'https://discord.com/api/v10';
 
-async function discordFetch(path: string, init: RequestInit): Promise<Response> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bot ${config.DISCORD_BOT_TOKEN}`,
-      'Content-Type': 'application/json',
-      ...init.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Discord API ${response.status}: ${body}`);
-  }
-  return response;
-}
-
-async function webhookFetch(path: string, init: RequestInit): Promise<Response> {
+async function apiFetch(path: string, init: RequestInit, context: string): Promise<Response> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init.headers },
   });
+
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Discord webhook API ${response.status}: ${body}`);
+    throw new Error(`${context} ${response.status}: ${body}`);
   }
   return response;
+}
+
+async function discordFetch(path: string, init: RequestInit): Promise<Response> {
+  return apiFetch(
+    path,
+    {
+      ...init,
+      headers: { Authorization: `Bot ${config.DISCORD_BOT_TOKEN}`, ...init.headers },
+    },
+    'Discord API',
+  );
+}
+
+async function webhookFetch(path: string, init: RequestInit): Promise<Response> {
+  return apiFetch(path, init, 'Discord webhook API');
 }
 
 export async function registerGuildCommands(commands: unknown[]): Promise<void> {
