@@ -236,10 +236,12 @@ integration(
     );
     assert.match(otherCancel.json().data.content, /har ställts in/);
     await waitForDiscordBackgroundTasks();
-    const cancelledCardCall = [...discordCalls].reverse().find(
-      (call) =>
-        call.url.endsWith('/channels/channel/messages/message-1') && call.method === 'PATCH',
-    );
+    const cancelledCardCall = [...discordCalls]
+      .reverse()
+      .find(
+        (call) =>
+          call.url.endsWith('/channels/channel/messages/message-1') && call.method === 'PATCH',
+      );
     assert.ok(cancelledCardCall);
     assert.match(cancelledCardCall.body ?? '', /INSTÄLLT/);
     assert.match(cancelledCardCall.body ?? '', /"disabled":true/);
