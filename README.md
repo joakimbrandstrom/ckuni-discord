@@ -150,13 +150,16 @@ See [`docs/CLOUDFLARE_TUNNEL.md`](docs/CLOUDFLARE_TUNNEL.md) for the exact Cloud
 
 ## Discord commands
 
-### Create a ride
+### Create and edit a ride
 
 ```text
-/ride create title:"CK UNI Tuesday Tempo" date:2026-11-10 time:19:00 duration:75 type:intervals zwift_url:https://...
+/ride create
+/ride edit id:12
 ```
 
-The bot posts a ride card with `Join` and `Maybe` buttons and creates a Discord Scheduled Event.
+The bot opens a Swedish form for the ride details. After submission it posts a ride card with
+`Jag kommer` and `Kanske` buttons and creates a Discord Scheduled Event. Ride Leaders and
+administrators can edit upcoming rides; the existing card and Scheduled Event are updated.
 
 ### List upcoming rides
 
@@ -170,7 +173,21 @@ The bot posts a ride card with `Join` and `Maybe` buttons and creates a Discord 
 /ride cancel id:12
 ```
 
-Only the creator can cancel it in V0.1.
+Ride Leaders and administrators can cancel a scheduled ride. The bot marks its existing ride card
+as cancelled, disables its participation buttons and cancels the Discord Scheduled Event.
+
+### Manage ride templates
+
+```text
+/ride mall-spara
+/ride mall-lista
+/ride mall-skapa id:3
+/ride mall-redigera id:3
+/ride mall-inaktivera id:3
+```
+
+Templates keep the reusable title, duration, ride type and optional ride details. Creating a ride
+from a template asks only for its start time and optional Zwift link.
 
 ### Connect Strava
 
@@ -192,6 +209,7 @@ V0.1 awards 10 points per confirmed CK UNI ride. The intent is participation, no
 
 - `users`
 - `rides`
+- `ride_templates`
 - `ride_participants`
 - `strava_connections`
 - `activities`
