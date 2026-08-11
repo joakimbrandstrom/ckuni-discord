@@ -30,6 +30,7 @@ import {
   cancelScheduledEvent,
   createScheduledEvent,
   editChannelMessage,
+  editOriginalInteractionResponse,
   sendChannelMessage,
   updateScheduledEvent,
 } from './api.js';
@@ -261,7 +262,6 @@ function scheduledEventDescription(ride: {
 }
 
 async function publishRide(ride: Awaited<ReturnType<typeof createRide>>): Promise<void> {
-  await setParticipant(ride.id, ride.creator_discord_id, 'going');
   const counts = await participantCounts(ride.id);
   const messageId = await sendChannelMessage(
     ride.discord_channel_id,
@@ -270,18 +270,40 @@ async function publishRide(ride: Awaited<ReturnType<typeof createRide>>): Promis
   if (messageId) await setDiscordMessageId(ride.id, messageId);
 
   const endsAt = new Date(new Date(ride.starts_at).getTime() + ride.duration_minutes * 60_000);
-  void createScheduledEvent({
+  const eventId = await createScheduledEvent({
     name: ride.title,
     description: scheduledEventDescription(ride),
     startsAt: new Date(ride.starts_at),
     endsAt,
     location: scheduledEventLocation(ride.zwift_url ?? undefined, ride.ride_type),
-  })
-    .then((eventId) => setDiscordEventId(ride.id, eventId))
-    .catch((error) => console.error('Kunde inte skapa schemalagd händelse:', error));
+  });
+  await setDiscordEventId(ride.id, eventId);
+}
+
+function updateInteractionLater(
+  interaction: DiscordInteraction,
+  work: () => Promise<string>,
+): void {
+  setImmediate(() => {
+    void work()
+      .then((content) =>
+        editOriginalInteractionResponse(interaction.application_id, interaction.token, { content }),
+      )
+      .catch(async (error) => {
+        console.error('Bakgrundsarbete för Discord-interaktion misslyckades:', error);
+        try {
+          await editOriginalInteractionResponse(interaction.application_id, interaction.token, {
+            content: 'Åtgärden sparades inte fullständigt. Försök igen eller kontakta en administratör.',
+          });
+        } catch (callbackError) {
+          console.error('Kunde inte uppdatera Discord-interaktionen:', callbackError);
+        }
+      });
+  });
 }
 
 async function handleCreateRide(
+  interaction: DiscordInteraction,
   user: DiscordUser,
   channelId: string,
   fields: Record<string, string>,
@@ -312,8 +334,12 @@ async function handleCreateRide(
       paceWorkout,
       notes,
     });
-    await publishRide(ride);
-    return ephemeral(`Passet **${ride.title}** (#${ride.id}) har skapats.`);
+    await setParticipant(ride.id, user.id, 'going');
+    updateInteractionLater(interaction, async () => {
+      await publishRide(ride);
+      return `Passet **${ride.title}** (#${ride.id}) har skapats och publicerats.`;
+    });
+    return ephemeral(`Passet **${ride.title}** (#${ride.id}) har sparats och publiceras …`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Kunde inte skapa passet.';
     return ephemeral(message);
@@ -335,16 +361,24 @@ async function handleListRides(): Promise<Record<string, unknown>> {
 }
 
 async function handleCancelRide(
-  user: DiscordUser,
   sub: DiscordOption,
 ): Promise<Record<string, unknown>> {
   const id = String(value<number>(sub.options, 'id'));
-  const ride = await cancelRide(id, user.id);
-  if (!ride)
-    return ephemeral('Passet hittades inte, är redan inställt eller skapades av någon annan.');
-  if (ride.discord_event_id) {
-    void cancelScheduledEvent(ride.discord_event_id).catch((error) => console.error(error));
-  }
+  const ride = await cancelRide(id);
+  if (!ride) return ephemeral('Passet hittades inte eller är redan inställt.');
+  setImmediate(() => {
+    void (async () => {
+      if (ride.discord_message_id) {
+        const counts = await participantCounts(ride.id);
+        await editChannelMessage(
+          ride.discord_channel_id,
+          ride.discord_message_id,
+          rideMessage(ride, counts, config.TIMEZONE),
+        );
+      }
+      if (ride.discord_event_id) await cancelScheduledEvent(ride.discord_event_id);
+    })().catch((error) => console.error('Kunde inte synka det inställda passet:', error));
+  });
   return ephemeral(`**${ride.title}** (#${ride.id}) har ställts in.`);
 }
 
@@ -394,6 +428,7 @@ async function syncEditedRide(ride: NonNullable<Awaited<ReturnType<typeof update
 }
 
 async function handleEditRideSubmit(
+  interaction: DiscordInteraction,
   rideId: string,
   fields: Record<string, string>,
 ): Promise<Record<string, unknown>> {
@@ -401,11 +436,14 @@ async function handleEditRideSubmit(
     const parsed = parseCreateRideFields(fields, config.TIMEZONE);
     const ride = await updateRide(rideId, parsed);
     if (!ride) return ephemeral('Passet finns inte eller kan inte längre redigeras.');
-    const { messageUpdated } = await syncEditedRide(ride);
-    const warning = messageUpdated
-      ? ''
-      : ' Passet är äldre och saknar ett sparat meddelande-ID, så passkortet kunde inte uppdateras.';
-    return ephemeral(`Passet **${ride.title}** (#${ride.id}) har uppdaterats.${warning}`);
+    updateInteractionLater(interaction, async () => {
+      const { messageUpdated } = await syncEditedRide(ride);
+      const warning = messageUpdated
+        ? ''
+        : ' Passet är äldre och saknar ett sparat meddelande-ID, så passkortet kunde inte uppdateras.';
+      return `Passet **${ride.title}** (#${ride.id}) har uppdaterats.${warning}`;
+    });
+    return ephemeral(`Ändringarna för **${ride.title}** (#${ride.id}) har sparats och publiceras …`);
   } catch (error) {
     return ephemeral(error instanceof Error ? error.message : 'Kunde inte uppdatera passet.');
   }
@@ -468,6 +506,7 @@ async function handleTemplateSubmit(
 }
 
 async function handleTemplateRideSubmit(
+  interaction: DiscordInteraction,
   templateId: string,
   user: DiscordUser,
   channelId: string,
@@ -491,8 +530,12 @@ async function handleTemplateRideSubmit(
       notes: template.notes ?? undefined,
       templateId: template.id,
     });
-    await publishRide(ride);
-    return ephemeral(`Passet **${ride.title}** (#${ride.id}) har skapats från mallen.`);
+    await setParticipant(ride.id, user.id, 'going');
+    updateInteractionLater(interaction, async () => {
+      await publishRide(ride);
+      return `Passet **${ride.title}** (#${ride.id}) har skapats och publicerats från mallen.`;
+    });
+    return ephemeral(`Passet **${ride.title}** (#${ride.id}) har sparats och publiceras från mallen …`);
   } catch (error) {
     const databaseError = error as { code?: string };
     if (databaseError.code === '23505') {
@@ -529,7 +572,7 @@ async function handleRide(interaction: DiscordInteraction): Promise<Record<strin
   }
 
   if (sub.name === 'edit') return openEditRideModal(sub);
-  if (sub.name === 'cancel') return handleCancelRide(user, sub);
+  if (sub.name === 'cancel') return handleCancelRide(sub);
   if (sub.name === 'mall-spara') return templateModal('template_save', 'Spara passmall');
   if (sub.name === 'mall-lista') return handleTemplateList();
   if (sub.name === 'mall-skapa') return openTemplateRideModal(sub);
@@ -551,15 +594,23 @@ async function handleModal(interaction: DiscordInteraction): Promise<Record<stri
   await upsertUser(user.id, displayName(user));
   const customId = interaction.data?.custom_id;
   const fields = modalValues(interaction);
-  if (customId === 'ride_create') return handleCreateRide(user, interaction.channel_id, fields);
+  if (customId === 'ride_create') {
+    return handleCreateRide(interaction, user, interaction.channel_id, fields);
+  }
   if (customId?.startsWith('ride_edit:')) {
-    return handleEditRideSubmit(customId.split(':')[1], fields);
+    return handleEditRideSubmit(interaction, customId.split(':')[1], fields);
   }
   if (customId === 'template_save' || customId?.startsWith('template_edit:')) {
     return handleTemplateSubmit(customId, user, fields);
   }
   if (customId?.startsWith('template_create_ride:')) {
-    return handleTemplateRideSubmit(customId.split(':')[1], user, interaction.channel_id, fields);
+    return handleTemplateRideSubmit(
+      interaction,
+      customId.split(':')[1],
+      user,
+      interaction.channel_id,
+      fields,
+    );
   }
   return ephemeral('Okänt formulär.');
 }

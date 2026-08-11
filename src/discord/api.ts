@@ -19,6 +19,18 @@ async function discordFetch(path: string, init: RequestInit): Promise<Response> 
   return response;
 }
 
+async function webhookFetch(path: string, init: RequestInit): Promise<Response> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init.headers },
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Discord webhook API ${response.status}: ${body}`);
+  }
+  return response;
+}
+
 export async function registerGuildCommands(commands: unknown[]): Promise<void> {
   await discordFetch(
     `/applications/${config.DISCORD_APPLICATION_ID}/guilds/${config.DISCORD_GUILD_ID}/commands`,
@@ -95,6 +107,17 @@ export async function editChannelMessage(
   payload: unknown,
 ): Promise<void> {
   await discordFetch(`/channels/${channelId}/messages/${messageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function editOriginalInteractionResponse(
+  applicationId: string,
+  token: string,
+  payload: unknown,
+): Promise<void> {
+  await webhookFetch(`/webhooks/${applicationId}/${token}/messages/@original`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });

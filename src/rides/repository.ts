@@ -227,12 +227,12 @@ export async function listUpcomingRides(limit = 10): Promise<Ride[]> {
   return result.rows;
 }
 
-export async function cancelRide(rideId: string, creatorDiscordId: string): Promise<Ride | null> {
+export async function cancelRide(rideId: string): Promise<Ride | null> {
   const result = await pool.query<Ride>(
     `UPDATE rides SET status = 'cancelled'
-     WHERE id = $1 AND creator_discord_id = $2 AND status = 'scheduled'
+     WHERE id = $1 AND status = 'scheduled'
      RETURNING *`,
-    [rideId, creatorDiscordId],
+    [rideId],
   );
   return result.rows[0] ?? null;
 }

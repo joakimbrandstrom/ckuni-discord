@@ -28,6 +28,7 @@ export function rideMessage(
     .setZone(timezone)
     .setLocale('sv');
   const description = [
+    ride.status === 'cancelled' ? '🚫 **Det här passet är inställt.**' : undefined,
     ride.description || undefined,
     ride.route_world ? `🗺️ ${ride.route_world}` : undefined,
     ride.pace_workout ? `📈 ${ride.pace_workout}` : undefined,
@@ -46,7 +47,7 @@ export function rideMessage(
   return {
     embeds: [
       {
-        title: `🚴 ${ride.title}`,
+        title: ride.status === 'cancelled' ? `🚫 INSTÄLLT — ${ride.title}` : `🚴 ${ride.title}`,
         description,
       },
     ],
@@ -59,12 +60,14 @@ export function rideMessage(
             style: 3,
             label: 'Jag kommer',
             custom_id: `ride_join:${ride.id}`,
+            disabled: ride.status !== 'scheduled',
           },
           {
             type: 2,
             style: 2,
             label: 'Kanske',
             custom_id: `ride_maybe:${ride.id}`,
+            disabled: ride.status !== 'scheduled',
           },
         ],
       },
