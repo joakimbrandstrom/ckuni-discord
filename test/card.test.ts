@@ -56,3 +56,14 @@ test('omits optional card fields and falls back to the cycling icon', () => {
   assert.doesNotMatch(message.embeds[0].description, /Four hard efforts|example\.test/);
   assert.match(message.embeds[0].description, /🚴 recovery/);
 });
+
+test('marks cancelled rides clearly and disables participation buttons', () => {
+  const message = rideMessage(ride({ status: 'cancelled' }), { going: 3, maybe: 2 }, 'UTC') as {
+    embeds: Array<{ title: string; description: string }>;
+    components: Array<{ components: Array<{ disabled: boolean }> }>;
+  };
+
+  assert.match(message.embeds[0].title, /INSTÄLLT/);
+  assert.match(message.embeds[0].description, /passet är inställt/);
+  assert.ok(message.components[0].components.every((component) => component.disabled));
+});

@@ -35,6 +35,7 @@ import {
   updateScheduledEvent,
 } from './api.js';
 import { isRideManager } from './auth.js';
+import { runDiscordBackgroundTask, waitForDiscordBackgroundTasks } from './background.js';
 import { verifyDiscordSignature } from './signature.js';
 import type { DiscordInteraction, DiscordOption, DiscordUser } from './types.js';
 
@@ -284,8 +285,8 @@ function updateInteractionLater(
   interaction: DiscordInteraction,
   work: () => Promise<string>,
 ): void {
-  setImmediate(() => {
-    void work()
+  runDiscordBackgroundTask(async () => {
+    await work()
       .then((content) =>
         editOriginalInteractionResponse(interaction.application_id, interaction.token, { content }),
       )
@@ -293,7 +294,8 @@ function updateInteractionLater(
         console.error('Bakgrundsarbete för Discord-interaktion misslyckades:', error);
         try {
           await editOriginalInteractionResponse(interaction.application_id, interaction.token, {
-            content: 'Åtgärden sparades inte fullständigt. Försök igen eller kontakta en administratör.',
+            content:
+              'Åtgärden sparades inte fullständigt. Försök igen eller kontakta en administratör.',
           });
         } catch (callbackError) {
           console.error('Kunde inte uppdatera Discord-interaktionen:', callbackError);
@@ -360,14 +362,12 @@ async function handleListRides(): Promise<Record<string, unknown>> {
   return ephemeral(`### Kommande CK UNI-pass\n${lines.join('\n')}`);
 }
 
-async function handleCancelRide(
-  sub: DiscordOption,
-): Promise<Record<string, unknown>> {
+async function handleCancelRide(sub: DiscordOption): Promise<Record<string, unknown>> {
   const id = String(value<number>(sub.options, 'id'));
   const ride = await cancelRide(id);
   if (!ride) return ephemeral('Passet hittades inte eller är redan inställt.');
-  setImmediate(() => {
-    void (async () => {
+  runDiscordBackgroundTask(async () => {
+    try {
       if (ride.discord_message_id) {
         const counts = await participantCounts(ride.id);
         await editChannelMessage(
@@ -377,7 +377,9 @@ async function handleCancelRide(
         );
       }
       if (ride.discord_event_id) await cancelScheduledEvent(ride.discord_event_id);
-    })().catch((error) => console.error('Kunde inte synka det inställda passet:', error));
+    } catch (error) {
+      console.error('Kunde inte synka det inställda passet:', error);
+    }
   });
   return ephemeral(`**${ride.title}** (#${ride.id}) har ställts in.`);
 }
@@ -443,7 +445,9 @@ async function handleEditRideSubmit(
         : ' Passet är äldre och saknar ett sparat meddelande-ID, så passkortet kunde inte uppdateras.';
       return `Passet **${ride.title}** (#${ride.id}) har uppdaterats.${warning}`;
     });
-    return ephemeral(`Ändringarna för **${ride.title}** (#${ride.id}) har sparats och publiceras …`);
+    return ephemeral(
+      `Ändringarna för **${ride.title}** (#${ride.id}) har sparats och publiceras …`,
+    );
   } catch (error) {
     return ephemeral(error instanceof Error ? error.message : 'Kunde inte uppdatera passet.');
   }
@@ -535,7 +539,9 @@ async function handleTemplateRideSubmit(
       await publishRide(ride);
       return `Passet **${ride.title}** (#${ride.id}) har skapats och publicerats från mallen.`;
     });
-    return ephemeral(`Passet **${ride.title}** (#${ride.id}) har sparats och publiceras från mallen …`);
+    return ephemeral(
+      `Passet **${ride.title}** (#${ride.id}) har sparats och publiceras från mallen …`,
+    );
   } catch (error) {
     const databaseError = error as { code?: string };
     if (databaseError.code === '23505') {
@@ -560,7 +566,7 @@ async function handleRide(interaction: DiscordInteraction): Promise<Record<strin
     if (
       !isRideManager(interaction, config.DISCORD_RIDE_LEADER_ROLE_ID, config.DISCORD_ADMIN_ROLE_ID)
     ) {
-      return ephemeral('🚫 Endast Ride Leaders och administratörer kan skapa pass.');
+      return ephemeral('🚫 Endast ledare och administratörer kan skapa pass.');
     }
     return rideModal();
   }
@@ -568,7 +574,7 @@ async function handleRide(interaction: DiscordInteraction): Promise<Record<strin
   if (
     !isRideManager(interaction, config.DISCORD_RIDE_LEADER_ROLE_ID, config.DISCORD_ADMIN_ROLE_ID)
   ) {
-    return ephemeral('🚫 Endast Ride Leaders och administratörer kan hantera pass och mallar.');
+    return ephemeral('🚫 Endast ledare och administratörer kan hantera pass och mallar.');
   }
 
   if (sub.name === 'edit') return openEditRideModal(sub);
@@ -589,7 +595,7 @@ async function handleModal(interaction: DiscordInteraction): Promise<Record<stri
   if (
     !isRideManager(interaction, config.DISCORD_RIDE_LEADER_ROLE_ID, config.DISCORD_ADMIN_ROLE_ID)
   ) {
-    return ephemeral('🚫 Endast Ride Leaders och administratörer kan skapa pass.');
+    return ephemeral('🚫 Endast ledare och administratörer kan skapa pass.');
   }
   await upsertUser(user.id, displayName(user));
   const customId = interaction.data?.custom_id;
@@ -677,6 +683,7 @@ function header(request: FastifyRequest, name: string): string | undefined {
 }
 
 export async function registerDiscordInteractions(app: FastifyInstance): Promise<void> {
+  app.addHook('onClose', waitForDiscordBackgroundTasks);
   app.post('/discord/interactions', async (request, reply) => {
     const rawBody = (request as FastifyRequest & { rawBody?: string }).rawBody;
     const signature = header(request, 'x-signature-ed25519');

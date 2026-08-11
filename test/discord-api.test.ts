@@ -16,6 +16,7 @@ const {
   cancelScheduledEvent,
   createScheduledEvent,
   editChannelMessage,
+  editOriginalInteractionResponse,
   registerGuildCommands,
   sendChannelMessage,
   updateScheduledEvent,
@@ -112,6 +113,19 @@ test('updates scheduled events and existing channel messages', async () => {
       },
     ],
   );
+});
+
+test('updates the original interaction through an unauthenticated webhook request', async () => {
+  await editOriginalInteractionResponse('application-123', 'interaction-token', {
+    content: 'Passet har publicerats.',
+  });
+
+  assert.equal(
+    calls[0].url,
+    'https://discord.com/api/v10/webhooks/application-123/interaction-token/messages/@original',
+  );
+  assert.equal(calls[0].init?.method, 'PATCH');
+  assert.deepEqual(calls[0].init?.headers, { 'Content-Type': 'application/json' });
 });
 
 test('Discord API failures surface the response status and body', async () => {

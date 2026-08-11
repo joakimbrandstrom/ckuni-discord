@@ -3,6 +3,7 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { DateTime } from 'luxon';
+import { waitForDiscordBackgroundTasks } from '../../src/discord/background.js';
 import type { DiscordInteraction } from '../../src/discord/types.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -18,6 +19,7 @@ process.env.DISCORD_PUBLIC_KEY = keys.publicKey
 process.env.DISCORD_BOT_TOKEN = 'token';
 process.env.DISCORD_GUILD_ID = 'guild';
 process.env.DISCORD_RIDE_LEADER_ROLE_ID = 'ride-leader';
+process.env.DISCORD_ADMIN_ROLE_ID = 'admin';
 process.env.LOG_LEVEL = 'silent';
 process.env.TIMEZONE = 'UTC';
 process.env.PUBLIC_BASE_URL = 'https://bot.example.test';
@@ -30,12 +32,18 @@ process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString('base64');
 let app: FastifyInstance;
 let db: typeof import('../../src/db/pool.js');
 const originalFetch = globalThis.fetch;
+const discordCalls: Array<{ url: string; method?: string; body?: string }> = [];
 
 before(async () => {
   if (!databaseUrl) return;
   // Scheduled Discord events are the only external request in this flow. The
   // application database remains real while the remote Discord API is isolated.
-  globalThis.fetch = async () => new Response(JSON.stringify({ id: 'event-1' }), { status: 200 });
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    discordCalls.push({ url, method: init?.method, body: String(init?.body ?? '') });
+    const id = url.includes('/channels/') && init?.method === 'POST' ? 'message-1' : 'event-1';
+    return new Response(JSON.stringify({ id }), { status: 200 });
+  };
   db = await import('../../src/db/pool.js');
   const { migrate } = await import('../../src/db/migrate.js');
   await migrate(db.pool);
@@ -116,7 +124,7 @@ integration(
     const normalCreate = await send(
       interaction('ride', 'member', [], { options: subcommand('create') }),
     );
-    assert.match(normalCreate.json().data.content, /Endast Ride Leaders/);
+    assert.match(normalCreate.json().data.content, /Endast ledare/);
 
     const opened = await send(
       interaction('ride', 'leader', ['ride-leader'], { options: subcommand('create') }),
@@ -146,7 +154,8 @@ integration(
     assert.equal(created.statusCode, 200);
     const rideId = /#(\d+)/.exec(created.json().data.content)?.[1];
     assert.ok(rideId);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitForDiscordBackgroundTasks();
+    assert.ok(discordCalls.some((call) => call.url.endsWith('/messages/@original')));
 
     const editOpened = await send(
       interaction('ride', 'other-leader', ['ride-leader'], {
@@ -165,7 +174,8 @@ integration(
         details: 'Beskrivning: Ny beskrivning\nTempo/träning: 2,5 W/kg',
       }),
     );
-    assert.match(edited.json().data.content, /har uppdaterats/);
+    assert.match(edited.json().data.content, /har sparats och publiceras/);
+    await waitForDiscordBackgroundTasks();
     const storedRide = await db.pool.query(
       'SELECT title, duration_minutes, pace_workout, discord_message_id FROM rides WHERE id=$1',
       [rideId],
@@ -174,7 +184,7 @@ integration(
       title: 'Uppdaterat integrationspass',
       duration_minutes: 75,
       pace_workout: '2,5 W/kg',
-      discord_message_id: 'event-1',
+      discord_message_id: 'message-1',
     });
 
     const listed = await send(
@@ -206,6 +216,13 @@ integration(
     const strava = await send(interaction('strava', 'member'));
     assert.match(strava.json().data.components[0].components[0].url, /\/strava\/oauth\?state=/);
 
+    const memberCancel = await send(
+      interaction('ride', 'member', [], {
+        options: subcommand('cancel', Number(rideId)),
+      }),
+    );
+    assert.match(memberCancel.json().data.content, /Endast ledare/);
+
     const otherCancel = await send(
       interaction('ride', 'other-leader', ['ride-leader'], {
         options: [
@@ -217,19 +234,15 @@ integration(
         ],
       }),
     );
-    assert.match(otherCancel.json().data.content, /skapades av någon annan/);
-    const cancelled = await send(
-      interaction('ride', 'leader', ['ride-leader'], {
-        options: [
-          {
-            name: 'cancel',
-            type: 1,
-            options: [{ name: 'id', type: 4, value: Number(rideId) }],
-          },
-        ],
-      }),
+    assert.match(otherCancel.json().data.content, /har ställts in/);
+    await waitForDiscordBackgroundTasks();
+    const cancelledCardCall = [...discordCalls].reverse().find(
+      (call) =>
+        call.url.endsWith('/channels/channel/messages/message-1') && call.method === 'PATCH',
     );
-    assert.match(cancelled.json().data.content, /har ställts in/);
+    assert.ok(cancelledCardCall);
+    assert.match(cancelledCardCall.body ?? '', /INSTÄLLT/);
+    assert.match(cancelledCardCall.body ?? '', /"disabled":true/);
 
     const emptyList = await send(
       interaction('ride', 'member', [], {
@@ -267,7 +280,7 @@ integration(
         zwift_url: 'https://zwift.test/template',
       }),
     );
-    assert.match(generated.json().data.content, /har skapats från mallen/);
+    assert.match(generated.json().data.content, /har sparats och publiceras från mallen/);
     const duplicate = await send(
       modal(`template_create_ride:${templateId}`, 'leader', ['ride-leader'], {
         date_time: templateStart,
@@ -275,6 +288,16 @@ integration(
       }),
     );
     assert.match(duplicate.json().data.content, /finns redan/);
+    await waitForDiscordBackgroundTasks();
+    const generatedRideId = /#(\d+)/.exec(generated.json().data.content)?.[1];
+    assert.ok(generatedRideId);
+    const adminCancel = await send(
+      interaction('ride', 'admin-user', ['admin'], {
+        options: subcommand('cancel', Number(generatedRideId)),
+      }),
+    );
+    assert.match(adminCancel.json().data.content, /har ställts in/);
+    await waitForDiscordBackgroundTasks();
 
     const editTemplate = await send(
       interaction('ride', 'leader', ['ride-leader'], {
