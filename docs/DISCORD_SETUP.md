@@ -41,7 +41,7 @@ Discord will validate the endpoint by sending a signed PING interaction. This ap
 ## Register commands
 
 ```bash
-docker compose run --rm bot node dist/src/discord/register-commands.js
+podman compose run --rm bot node dist/src/discord/register-commands.js
 ```
 
 Commands:

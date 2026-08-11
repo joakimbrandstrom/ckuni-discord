@@ -20,12 +20,12 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: docker
+  - package-ecosystem: podman
     directory: /
     schedule:
       interval: weekly
       day: monday
     groups:
-      docker-images:
+      podman-images:
         patterns:
           - "*"

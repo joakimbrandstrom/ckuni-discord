@@ -26,7 +26,7 @@ The application is bound on the host only to:
 127.0.0.1:3000
 ```
 
-The `cloudflared` container reaches the bot directly over Docker networking at:
+The `cloudflared` container reaches the bot directly over podman networking at:
 
 ```text
 http://bot:3000
@@ -74,7 +74,7 @@ openssl rand -hex 32
 Keep administration paths behind the existing VPN/Tailscale setup:
 
 - SSH
-- Docker daemon/socket
+- podman daemon/socket
 - dashboards and monitoring
 - database access
 - other home services

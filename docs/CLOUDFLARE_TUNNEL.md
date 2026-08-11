@@ -37,13 +37,13 @@ Cloudflare Quick Tunnels are intended for development/testing and do not require
 2. Start the stack with the `quick-tunnel` profile:
 
    ```bash
-   docker compose --profile quick-tunnel up -d --build
+   podman compose --profile quick-tunnel up -d --build
    ```
 
 3. Check the containers:
 
    ```bash
-   docker compose --profile quick-tunnel ps
+   podman compose --profile quick-tunnel ps
    ```
 
 4. Verify the bot locally from the server:
@@ -56,7 +56,7 @@ Cloudflare Quick Tunnels are intended for development/testing and do not require
 5. Get the temporary public URL:
 
    ```bash
-   docker compose logs cloudflared-quick
+   podman compose logs cloudflared-quick
    ```
 
    Look for a URL similar to:
@@ -74,7 +74,7 @@ Cloudflare Quick Tunnels are intended for development/testing and do not require
 7. Register the commands if you have not already done so:
 
    ```bash
-   docker compose run --rm bot node dist/src/discord/register-commands.js
+   podman compose run --rm bot node dist/src/discord/register-commands.js
    ```
 
 8. Run `/ping` in the CK UNI Discord server.
@@ -84,7 +84,7 @@ Quick Tunnel URLs change when the tunnel is recreated. Use this only to prove th
 To stop the Quick Tunnel stack:
 
 ```bash
-docker compose --profile quick-tunnel down
+podman compose --profile quick-tunnel down
 ```
 
 ## Permanent setup: remotely-managed tunnel
@@ -118,7 +118,7 @@ Hostname: bot.your-domain.example
 Service:  http://bot:3000
 ```
 
-`bot` is the Docker Compose service name. Because `cloudflared` and `bot` share the default Compose network, Cloudflare Tunnel can reach it directly without publishing the bot port to the LAN.
+`bot` is the podman Compose service name. Because `cloudflared` and `bot` share the default Compose network, Cloudflare Tunnel can reach it directly without publishing the bot port to the LAN.
 
 Cloudflare creates/proxies the DNS route for the selected hostname.
 
@@ -133,14 +133,14 @@ PUBLIC_BASE_URL=https://bot.your-domain.example
 Start the permanent tunnel profile:
 
 ```bash
-docker compose --profile tunnel up -d --build
+podman compose --profile tunnel up -d --build
 ```
 
 Check:
 
 ```bash
-docker compose --profile tunnel ps
-docker compose logs -f cloudflared
+podman compose --profile tunnel ps
+podman compose logs -f cloudflared
 ```
 
 ### 4. Configure Discord
@@ -174,13 +174,13 @@ The base Compose file intentionally publishes the application only on loopback:
 
 This means another device on the LAN cannot connect directly to `server-ip:3000`.
 
-The tunnel reaches the bot internally through Docker networking:
+The tunnel reaches the bot internally through podman networking:
 
 ```text
 cloudflared -> http://bot:3000
 ```
 
-PostgreSQL is only reachable inside the Docker network.
+PostgreSQL is only reachable inside the podman network.
 
 Your existing VPN/Tailscale setup can therefore remain unchanged for SSH, dashboards and other internal services.
 
@@ -208,8 +208,8 @@ For the first pilot, rely on application authentication/signature verification a
 Check that the bot is healthy:
 
 ```bash
-docker compose ps
-docker compose logs bot
+podman compose ps
+podman compose logs bot
 ```
 
 Then test name resolution/connectivity from the `cloudflared` service by confirming the published application Service URL is exactly:
@@ -225,7 +225,7 @@ Do not use `localhost:3000` for the permanent containerized tunnel: inside the `
 Check:
 
 ```bash
-docker compose logs -f bot cloudflared
+podman compose logs -f bot cloudflared
 ```
 
 Confirm the endpoint ends in:
@@ -241,8 +241,8 @@ and that `DISCORD_PUBLIC_KEY` matches the same Discord application.
 Quick Tunnel hostnames are temporary. Restart it and copy the new URL:
 
 ```bash
-docker compose --profile quick-tunnel restart cloudflared-quick
-docker compose logs cloudflared-quick
+podman compose --profile quick-tunnel restart cloudflared-quick
+podman compose logs cloudflared-quick
 ```
 
 Then update the Discord Interactions Endpoint URL.

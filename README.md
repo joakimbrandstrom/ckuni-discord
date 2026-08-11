@@ -11,7 +11,7 @@ Digital clubhouse for CK UNI cycling: Discord community, Zwift group rides and o
 - Discord Scheduled Event creation for each ride
 - Automatic 24-hour and 30-minute reminders
 - PostgreSQL persistence
-- Docker Compose deployment for a home server
+- podman Compose deployment for a home server
 - Cloudflare Tunnel ingress with no router port-forward
 - Cloudflare Quick Tunnel profile for the first test
 - `/health` and `/ready` endpoints
@@ -73,7 +73,7 @@ Do not commit `.env`.
 ## 3. Start locally
 
 ```bash
-docker compose up -d --build
+podman compose up -d --build
 ```
 
 The bot is deliberately bound only to the server's loopback interface:
@@ -88,7 +88,7 @@ It should not be reachable directly through the server's LAN IP.
 ## 4. Register Discord commands
 
 ```bash
-docker compose run --rm bot node dist/src/discord/register-commands.js
+podman compose run --rm bot node dist/src/discord/register-commands.js
 ```
 
 Or during development:
@@ -103,8 +103,8 @@ npm run commands:register
 Start the Cloudflare Quick Tunnel profile:
 
 ```bash
-docker compose --profile quick-tunnel up -d --build
-docker compose logs cloudflared-quick
+podman compose --profile quick-tunnel up -d --build
+podman compose logs cloudflared-quick
 ```
 
 Copy the generated URL, for example:
@@ -141,7 +141,7 @@ PUBLIC_BASE_URL=https://bot.your-domain.example
 Start:
 
 ```bash
-docker compose --profile tunnel up -d --build
+podman compose --profile tunnel up -d --build
 ```
 
 No router port-forward is needed. PostgreSQL remains private and the bot's host port remains loopback-only.
@@ -221,7 +221,7 @@ SQL migrations live in [`migrations/`](migrations/).
 
 - No router port-forward is required for the recommended deployment.
 - The bot publishes port 3000 only on `127.0.0.1` for local diagnostics.
-- Cloudflare Tunnel reaches `bot:3000` through Docker's private network.
+- Cloudflare Tunnel reaches `bot:3000` through podman's private network.
 - PostgreSQL is not published by Compose.
 - Discord interaction signatures are verified with Ed25519 before commands are processed.
 - Strava tokens are encrypted using AES-256-GCM.

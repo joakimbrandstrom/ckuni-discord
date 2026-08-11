@@ -42,12 +42,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Validate Docker Compose
+      - name: Validate podman Compose
         run: |
           cp .env.example .env
-          docker compose config >/dev/null
-          docker compose --profile quick-tunnel config >/dev/null
-          docker compose --profile tunnel config >/dev/null
+          podman compose config >/dev/null
+          podman compose --profile quick-tunnel config >/dev/null
+          podman compose --profile tunnel config >/dev/null
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
@@ -73,8 +73,8 @@ jobs:
           sed -i "s/^DISCORD_PUBLIC_KEY=.*/DISCORD_PUBLIC_KEY=$(printf '00%.0s' {1..32})/" .env
           sed -i 's/^DISCORD_BOT_TOKEN=.*/DISCORD_BOT_TOKEN=smoke/' .env
           sed -i 's/^DISCORD_GUILD_ID=.*/DISCORD_GUILD_ID=smoke/' .env
-          trap 'docker compose down --volumes' EXIT
-          docker compose up --detach --build postgres bot
+          trap 'podman compose down --volumes' EXIT
+          podman compose up --detach --build postgres bot
           for attempt in {1..30}; do
             if curl --fail --silent http://127.0.0.1:3000/health >/dev/null && \
                curl --fail --silent http://127.0.0.1:3000/ready >/dev/null; then
@@ -82,6 +82,6 @@ jobs:
             fi
             sleep 2
           done
-          docker compose ps
-          docker compose logs bot migrate postgres
+          podman compose ps
+          podman compose logs bot migrate postgres
           exit 1
