@@ -53,6 +53,18 @@ function parseRideType(value: string | undefined): RideType {
   return rideType;
 }
 
+function parseFutureStart(value: string | undefined, timezone: string, now: Date): Date {
+  const dateTime = required(value, 'Datum och tid');
+  const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})$/.exec(dateTime);
+  if (!match) throw new Error('Datum och tid måste skrivas som ÅÅÅÅ-MM-DD TT:mm.');
+
+  const startsAt = parseLocalRideStart(match[1], match[2], timezone);
+  if (startsAt.getTime() < now.getTime() - 60_000) {
+    throw new Error('Starttiden måste ligga i framtiden.');
+  }
+  return startsAt;
+}
+
 export function parseRideDetails(value: string | undefined): {
   description?: string;
   zwiftUrl?: string;
@@ -111,14 +123,7 @@ export function parseCreateRideFields(
   now = new Date(),
 ): CreateRideFields {
   const title = required(fields.title, 'Titel');
-  const dateTime = required(fields.date_time, 'Datum och tid');
-  const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})$/.exec(dateTime);
-  if (!match) throw new Error('Datum och tid måste skrivas som ÅÅÅÅ-MM-DD TT:mm.');
-
-  const startsAt = parseLocalRideStart(match[1], match[2], timezone);
-  if (startsAt.getTime() < now.getTime() - 60_000) {
-    throw new Error('Starttiden måste ligga i framtiden.');
-  }
+  const startsAt = parseFutureStart(fields.date_time, timezone, now);
 
   const durationMinutes = parseDuration(fields.duration);
   const rideType = parseRideType(fields.ride_type);
@@ -151,13 +156,7 @@ export function parseTemplateRideFields(
   timezone: string,
   now = new Date(),
 ): { startsAt: Date; zwiftUrl?: string } {
-  const dateTime = required(fields.date_time, 'Datum och tid');
-  const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})$/.exec(dateTime);
-  if (!match) throw new Error('Datum och tid måste skrivas som ÅÅÅÅ-MM-DD TT:mm.');
-  const startsAt = parseLocalRideStart(match[1], match[2], timezone);
-  if (startsAt.getTime() < now.getTime() - 60_000) {
-    throw new Error('Starttiden måste ligga i framtiden.');
-  }
+  const startsAt = parseFutureStart(fields.date_time, timezone, now);
   const rawUrl = fields.zwift_url?.trim();
   const zwiftUrl = rawUrl ? parseRideDetails(`Zwift: ${rawUrl}`).zwiftUrl : undefined;
   return { startsAt, zwiftUrl };
