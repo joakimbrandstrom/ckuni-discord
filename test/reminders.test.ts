@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { reminderMessage } from '../src/rides/reminder-message.js';
 import { needs24hReminder, needs30mReminder } from '../src/rides/reminder-thresholds.js';
+
+test('reminder messages are Swedish', () => {
+  const ride = { title: 'Tisdagspasset', starts_at: new Date('2026-08-12T18:00:00Z') };
+  assert.match(reminderMessage(ride, '24h', 'UTC'), /börjar i morgon/);
+  assert.match(reminderMessage(ride, '30m', 'UTC'), /börjar om 30 minuter/);
+});
 
 // ── 24h reminder ────────────────────────────────────────────────────────────
 

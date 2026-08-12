@@ -58,6 +58,19 @@ integration(
     });
     assert.equal((await rides.getRide(ride.id))?.title, 'Morning ride');
 
+    const started = await rides.createRide({
+      title: 'Already started',
+      rideType: 'social',
+      startsAt: new Date(Date.now() - 60_000),
+      durationMinutes: 60,
+      creatorDiscordId: 'leader',
+      channelId: 'channel',
+    });
+    assert.equal(
+      (await rides.listUpcomingRides()).some((item) => item.id === started.id),
+      false,
+    );
+
     await rides.setParticipant(ride.id, 'member', 'going');
     await rides.setParticipant(ride.id, 'member', 'maybe');
     assert.deepEqual(await rides.participantCounts(ride.id), {

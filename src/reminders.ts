@@ -1,7 +1,7 @@
-import { DateTime } from 'luxon';
 import { config } from './config.js';
 import { pool } from './db/pool.js';
 import { sendChannelMessage } from './discord/api.js';
+import { reminderMessage } from './rides/reminder-message.js';
 import { needs24hReminder, needs30mReminder } from './rides/reminder-thresholds.js';
 
 type ReminderRide = {
@@ -14,14 +14,11 @@ type ReminderRide = {
 };
 
 let running = false;
+let currentTick: Promise<void> | null = null;
 
 async function sendReminder(ride: ReminderRide, kind: '24h' | '30m'): Promise<void> {
-  const local = DateTime.fromJSDate(new Date(ride.starts_at), {
-    zone: 'utc',
-  }).setZone(config.TIMEZONE);
-  const when = kind === '24h' ? 'tomorrow' : 'in 30 minutes';
   await sendChannelMessage(ride.discord_channel_id, {
-    content: `🔔 **${ride.title}** börjar ${when} — ${local.toFormat('HH:mm')}. Anmäl dig på passkortet.`,
+    content: reminderMessage(ride, kind, config.TIMEZONE),
   });
   await pool.query(
     `UPDATE rides SET ${kind === '24h' ? 'reminder_24h_sent' : 'reminder_30m_sent'} = TRUE WHERE id = $1`,
@@ -62,6 +59,18 @@ async function tick(): Promise<void> {
 }
 
 export function startReminderLoop(): NodeJS.Timeout {
-  void tick();
-  return setInterval(() => void tick(), 60_000);
+  const runTick = () => {
+    if (currentTick) return;
+    currentTick = tick().finally(() => {
+      currentTick = null;
+    });
+  };
+  runTick();
+  return setInterval(runTick, 60_000);
+}
+
+/** Stop scheduling reminders and let an in-flight database/Discord operation finish. */
+export async function stopReminderLoop(timer: NodeJS.Timeout): Promise<void> {
+  clearInterval(timer);
+  await currentTick;
 }
