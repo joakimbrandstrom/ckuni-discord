@@ -41,7 +41,7 @@ Discord will validate the endpoint by sending a signed PING interaction. This ap
 ## Register commands
 
 ```bash
-docker compose run --rm bot node dist/src/discord/register-commands.js
+podman compose run --rm bot node dist/src/discord/register-commands.js
 ```
 
 Commands:
@@ -49,10 +49,23 @@ Commands:
 - `/ping`
 - `/ride create`
 - `/ride list`
+- `/ride edit`
 - `/ride cancel`
+- `/ride mall-spara`
+- `/ride mall-lista`
+- `/ride mall-skapa`
+- `/ride mall-redigera`
+- `/ride mall-inaktivera`
 - `/strava connect`
 - `/leaderboard`
 
 ## Suggested CK UNI server permissions
 
-Create a Discord role such as `Ride Leader`. V0.1 allows any member to create rides; role-based authorization is on the roadmap. If you want a controlled pilot, limit visibility/use of the rides channel to the test group first.
+Create Discord roles such as `Ride Leader` and `Admin`, copy their role IDs, and configure
+`DISCORD_RIDE_LEADER_ROLE_ID` and `DISCORD_ADMIN_ROLE_ID`. Members with either role can create,
+edit and cancel rides and manage ride templates. Other members can list rides and use the
+participation buttons.
+
+If both role ID settings are empty, ride management is intentionally open to every server member
+for local development and testing. Configure at least one role ID before running a controlled
+pilot.

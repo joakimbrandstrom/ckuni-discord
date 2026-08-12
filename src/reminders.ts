@@ -21,7 +21,7 @@ async function sendReminder(ride: ReminderRide, kind: '24h' | '30m'): Promise<vo
   }).setZone(config.TIMEZONE);
   const when = kind === '24h' ? 'tomorrow' : 'in 30 minutes';
   await sendChannelMessage(ride.discord_channel_id, {
-    content: `🔔 **${ride.title}** starts ${when} — ${local.toFormat('HH:mm')}. Use the ride card to join.`,
+    content: `🔔 **${ride.title}** börjar ${when} — ${local.toFormat('HH:mm')}. Anmäl dig på passkortet.`,
   });
   await pool.query(
     `UPDATE rides SET ${kind === '24h' ? 'reminder_24h_sent' : 'reminder_30m_sent'} = TRUE WHERE id = $1`,

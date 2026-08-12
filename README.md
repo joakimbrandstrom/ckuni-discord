@@ -11,7 +11,7 @@ Digital clubhouse for CK UNI cycling: Discord community, Zwift group rides and o
 - Discord Scheduled Event creation for each ride
 - Automatic 24-hour and 30-minute reminders
 - PostgreSQL persistence
-- Docker Compose deployment for a home server
+- podman Compose deployment for a home server
 - Cloudflare Tunnel ingress with no router port-forward
 - Cloudflare Quick Tunnel profile for the first test
 - `/health` and `/ready` endpoints
@@ -73,7 +73,7 @@ Do not commit `.env`.
 ## 3. Start locally
 
 ```bash
-docker compose up -d --build
+podman compose up -d --build
 ```
 
 The bot is deliberately bound only to the server's loopback interface:
@@ -88,7 +88,7 @@ It should not be reachable directly through the server's LAN IP.
 ## 4. Register Discord commands
 
 ```bash
-docker compose run --rm bot node dist/src/discord/register-commands.js
+podman compose run --rm bot node dist/src/discord/register-commands.js
 ```
 
 Or during development:
@@ -103,8 +103,8 @@ npm run commands:register
 Start the Cloudflare Quick Tunnel profile:
 
 ```bash
-docker compose --profile quick-tunnel up -d --build
-docker compose logs cloudflared-quick
+podman compose --profile quick-tunnel up -d --build
+podman compose logs cloudflared-quick
 ```
 
 Copy the generated URL, for example:
@@ -141,7 +141,7 @@ PUBLIC_BASE_URL=https://bot.your-domain.example
 Start:
 
 ```bash
-docker compose --profile tunnel up -d --build
+podman compose --profile tunnel up -d --build
 ```
 
 No router port-forward is needed. PostgreSQL remains private and the bot's host port remains loopback-only.
@@ -150,13 +150,16 @@ See [`docs/CLOUDFLARE_TUNNEL.md`](docs/CLOUDFLARE_TUNNEL.md) for the exact Cloud
 
 ## Discord commands
 
-### Create a ride
+### Create and edit a ride
 
 ```text
-/ride create title:"CK UNI Tuesday Tempo" date:2026-11-10 time:19:00 duration:75 type:intervals zwift_url:https://...
+/ride create
+/ride edit id:12
 ```
 
-The bot posts a ride card with `Join` and `Maybe` buttons and creates a Discord Scheduled Event.
+The bot opens a Swedish form for the ride details. After submission it posts a ride card with
+`Jag kommer` and `Kanske` buttons and creates a Discord Scheduled Event. Ride Leaders and
+administrators can edit upcoming rides; the existing card and Scheduled Event are updated.
 
 ### List upcoming rides
 
@@ -170,7 +173,21 @@ The bot posts a ride card with `Join` and `Maybe` buttons and creates a Discord 
 /ride cancel id:12
 ```
 
-Only the creator can cancel it in V0.1.
+Ride Leaders and administrators can cancel a scheduled ride. The bot marks its existing ride card
+as cancelled, disables its participation buttons and cancels the Discord Scheduled Event.
+
+### Manage ride templates
+
+```text
+/ride mall-spara
+/ride mall-lista
+/ride mall-skapa id:3
+/ride mall-redigera id:3
+/ride mall-inaktivera id:3
+```
+
+Templates keep the reusable title, duration, ride type and optional ride details. Creating a ride
+from a template asks only for its start time and optional Zwift link.
 
 ### Connect Strava
 
@@ -192,6 +209,7 @@ V0.1 awards 10 points per confirmed CK UNI ride. The intent is participation, no
 
 - `users`
 - `rides`
+- `ride_templates`
 - `ride_participants`
 - `strava_connections`
 - `activities`
@@ -203,7 +221,7 @@ SQL migrations live in [`migrations/`](migrations/).
 
 - No router port-forward is required for the recommended deployment.
 - The bot publishes port 3000 only on `127.0.0.1` for local diagnostics.
-- Cloudflare Tunnel reaches `bot:3000` through Docker's private network.
+- Cloudflare Tunnel reaches `bot:3000` through podman's private network.
 - PostgreSQL is not published by Compose.
 - Discord interaction signatures are verified with Ed25519 before commands are processed.
 - Strava tokens are encrypted using AES-256-GCM.

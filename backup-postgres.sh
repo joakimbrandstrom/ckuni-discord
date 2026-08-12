@@ -5,7 +5,7 @@
 #   ./backup-postgres.sh [backup-dir]
 #
 # The backup directory defaults to ./backups (relative to the script).
-# The script reads the same .env file used by Docker Compose, so no
+# The script reads the same .env file used by podman Compose, so no
 # credentials need to be specified on the command line.
 #
 # The dump is written to:
@@ -13,8 +13,8 @@
 #
 # Restore with:
 #   pg_restore --clean --if-exists -d <DATABASE_URL> <file.dump>
-# or via Docker Compose:
-#   docker compose exec -T postgres pg_restore --clean --if-exists \
+# or via podman Compose:
+#   podman compose exec -T postgres pg_restore --clean --if-exists \
 #     -U $POSTGRES_USER -d $POSTGRES_DB < <file.dump>
 
 set -euo pipefail
@@ -40,7 +40,7 @@ mkdir -p "${BACKUP_DIR}"
 echo "Backing up database '${POSTGRES_DB}' to ${DUMP_FILE} …"
 
 # Run pg_dump inside the running postgres container without stopping it.
-docker compose exec -T postgres \
+podman compose exec -T postgres \
   pg_dump -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Fc \
   > "${DUMP_FILE}"
 

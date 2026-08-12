@@ -15,14 +15,14 @@ Cloudflare Tunnel (outbound-only)
 cloudflared container
       |
       v
-bot:3000  ---> PostgreSQL (private Docker network)
+bot:3000  ---> PostgreSQL (private podman network)
 ```
 
 The rest of the home server can stay behind VPN/Tailscale. No router port-forward is required for CK UNI Discord.
 
 ## Requirements
 
-- Linux server with Docker Engine + Compose plugin
+- Linux server with podman Engine + Compose plugin
 - Git
 - Discord application credentials
 - For the permanent setup: a Cloudflare-managed domain/hostname and a remotely-managed Cloudflare Tunnel
@@ -41,7 +41,7 @@ $EDITOR .env
 ### Local-only stack
 
 ```bash
-docker compose up -d --build
+podman compose up -d --build
 ```
 
 The bot is available only on the server loopback interface:
@@ -56,8 +56,8 @@ It is intentionally **not** available at `http://<server-lan-ip>:3000`.
 ### First public test with Quick Tunnel
 
 ```bash
-docker compose --profile quick-tunnel up -d --build
-docker compose logs cloudflared-quick
+podman compose --profile quick-tunnel up -d --build
+podman compose logs cloudflared-quick
 ```
 
 Copy the generated `https://....trycloudflare.com` URL and use:
@@ -87,7 +87,7 @@ PUBLIC_BASE_URL=https://bot.your-domain.example
 Then start:
 
 ```bash
-docker compose --profile tunnel up -d --build
+podman compose --profile tunnel up -d --build
 ```
 
 See [`CLOUDFLARE_TUNNEL.md`](CLOUDFLARE_TUNNEL.md) for the full setup and troubleshooting guide.
@@ -95,8 +95,8 @@ See [`CLOUDFLARE_TUNNEL.md`](CLOUDFLARE_TUNNEL.md) for the full setup and troubl
 ## Inspect
 
 ```bash
-docker compose ps
-docker compose logs -f bot
+podman compose ps
+podman compose logs -f bot
 curl http://127.0.0.1:3000/health
 curl http://127.0.0.1:3000/ready
 ```
@@ -104,8 +104,8 @@ curl http://127.0.0.1:3000/ready
 For a permanent tunnel:
 
 ```bash
-docker compose --profile tunnel ps
-docker compose logs -f cloudflared
+podman compose --profile tunnel ps
+podman compose logs -f cloudflared
 ```
 
 ## Upgrade
@@ -114,14 +114,14 @@ Without Tunnel profile:
 
 ```bash
 git pull
-docker compose up -d --build
+podman compose up -d --build
 ```
 
 With the permanent Tunnel profile:
 
 ```bash
 git pull
-docker compose --profile tunnel up -d --build
+podman compose --profile tunnel up -d --build
 ```
 
 Database migrations run automatically when the bot container starts.
@@ -133,7 +133,7 @@ The important persistent data is the `postgres_data` volume. Back up PostgreSQL 
 Example logical backup:
 
 ```bash
-docker compose exec -T postgres pg_dump -U ckuni ckuni > ckuni-$(date +%F).sql
+podman compose exec -T postgres pg_dump -U ckuni ckuni > ckuni-$(date +%F).sql
 ```
 
 ## Firewall / VPN
@@ -144,7 +144,7 @@ Keep these private:
 
 - PostgreSQL `5432`
 - SSH
-- Docker daemon/socket
+- podman daemon/socket
 - server administration interfaces
 - other home services
 

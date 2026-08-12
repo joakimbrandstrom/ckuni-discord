@@ -39,7 +39,7 @@ integration('migrations are repeatable', async () => {
   const result = await db.pool.query('SELECT filename FROM schema_migrations ORDER BY filename');
   assert.deepEqual(
     result.rows.map((row) => row.filename),
-    ['001_init.sql'],
+    ['001_init.sql', '002_ride_metadata_and_templates.sql'],
   );
 });
 
@@ -57,7 +57,6 @@ integration(
       channelId: 'channel',
     });
     assert.equal((await rides.getRide(ride.id))?.title, 'Morning ride');
-    assert.equal(await rides.cancelRide(ride.id, 'member'), null);
 
     await rides.setParticipant(ride.id, 'member', 'going');
     await rides.setParticipant(ride.id, 'member', 'maybe');
@@ -71,7 +70,7 @@ integration(
       maybe: 0,
     });
     assert.equal((await rides.getLeaderboard())[0].display_name, 'Member');
-    assert.equal((await rides.cancelRide(ride.id, 'leader'))?.status, 'cancelled');
+    assert.equal((await rides.cancelRide(ride.id))?.status, 'cancelled');
     assert.equal(
       (await rides.listUpcomingRides()).some((item) => item.id === ride.id),
       false,
@@ -133,6 +132,56 @@ integration(
         .ride_id,
       null,
     );
+  },
+);
+
+integration(
+  'ride templates are editable, disableable and prevent duplicate generated rides',
+  async () => {
+    const suffix = String(Date.now());
+    await rides.upsertUser(`template-leader-${suffix}`, 'Mallansvarig');
+    const template = await rides.createRideTemplate({
+      name: `Tisdagsintervaller ${suffix}`,
+      title: 'Tisdagsintervaller',
+      description: 'Fyra block',
+      rideType: 'intervals',
+      durationMinutes: 60,
+      creatorDiscordId: `template-leader-${suffix}`,
+    });
+    assert.equal((await rides.getRideTemplate(template.id))?.active, true);
+
+    const updated = await rides.updateRideTemplate(template.id, {
+      name: `Tisdagsintervaller ${suffix}`,
+      title: 'Nya intervaller',
+      rideType: 'intervals',
+      durationMinutes: 75,
+    });
+    assert.equal(updated?.duration_minutes, 75);
+
+    const start = new Date(Date.now() + 86_400_000);
+    await rides.createRide({
+      title: updated?.title ?? 'Nya intervaller',
+      rideType: 'intervals',
+      startsAt: start,
+      durationMinutes: 75,
+      creatorDiscordId: `template-leader-${suffix}`,
+      channelId: 'channel',
+      templateId: template.id,
+    });
+    await assert.rejects(
+      () =>
+        rides.createRide({
+          title: 'Dubblett',
+          rideType: 'intervals',
+          startsAt: start,
+          durationMinutes: 75,
+          creatorDiscordId: `template-leader-${suffix}`,
+          channelId: 'channel',
+          templateId: template.id,
+        }),
+      (error: unknown) => (error as { code?: string }).code === '23505',
+    );
+    assert.equal((await rides.disableRideTemplate(template.id))?.active, false);
   },
 );
 

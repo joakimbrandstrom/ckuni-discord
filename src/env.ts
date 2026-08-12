@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Docker Compose/.env files represent an unset optional value as an empty
+ * podman Compose/.env files represent an unset optional value as an empty
  * string (FOO=). Convert that to undefined before Zod validates it so
  * optional integrations can genuinely be left unconfigured.
  */

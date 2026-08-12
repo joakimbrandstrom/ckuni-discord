@@ -15,6 +15,11 @@ function ride(overrides: Partial<Ride> = {}): Ride {
     creator_discord_id: 'creator',
     discord_channel_id: 'channel',
     discord_event_id: null,
+    discord_message_id: null,
+    route_world: null,
+    pace_workout: null,
+    notes: null,
+    template_id: null,
     status: 'scheduled',
     ...overrides,
   };
@@ -28,13 +33,13 @@ test('builds a complete ride card with participant controls', () => {
 
   assert.equal(message.embeds[0].title, '🚴 Tuesday intervals');
   assert.match(message.embeds[0].description, /Four hard efforts/);
-  assert.match(message.embeds[0].description, /Tue 10 Nov, 19:00/);
+  assert.match(message.embeds[0].description, /tis 10 nov\., 19:00/);
   assert.match(message.embeds[0].description, /⏱ 60 min/);
-  assert.match(message.embeds[0].description, /⚡ intervals/);
+  assert.match(message.embeds[0].description, /⚡ Intervaller/);
   assert.match(message.embeds[0].description, /https:\/\/example\.test\/zwift/);
-  assert.match(message.embeds[0].description, /Going: \*\*3\*\*/);
-  assert.match(message.embeds[0].description, /Maybe: \*\*2\*\*/);
-  assert.match(message.embeds[0].description, /Ride ID: `42`/);
+  assert.match(message.embeds[0].description, /Kommer: \*\*3\*\*/);
+  assert.match(message.embeds[0].description, /Kanske: \*\*2\*\*/);
+  assert.match(message.embeds[0].description, /Pass-ID: `42`/);
   assert.deepEqual(
     message.components[0].components.map((component) => component.custom_id),
     ['ride_join:42', 'ride_maybe:42'],
@@ -50,4 +55,15 @@ test('omits optional card fields and falls back to the cycling icon', () => {
 
   assert.doesNotMatch(message.embeds[0].description, /Four hard efforts|example\.test/);
   assert.match(message.embeds[0].description, /🚴 recovery/);
+});
+
+test('marks cancelled rides clearly and disables participation buttons', () => {
+  const message = rideMessage(ride({ status: 'cancelled' }), { going: 3, maybe: 2 }, 'UTC') as {
+    embeds: Array<{ title: string; description: string }>;
+    components: Array<{ components: Array<{ disabled: boolean }> }>;
+  };
+
+  assert.match(message.embeds[0].title, /INSTÄLLT/);
+  assert.match(message.embeds[0].description, /passet är inställt/);
+  assert.ok(message.components[0].components.every((component) => component.disabled));
 });
