@@ -1,14 +1,14 @@
 import { buildApp } from './app.js';
 import { config } from './config.js';
 import { closePool } from './db/pool.js';
-import { startReminderLoop } from './reminders.js';
+import { startReminderLoop, stopReminderLoop } from './reminders.js';
 
 const app = await buildApp();
-const reminderTimer = startReminderLoop();
+const reminderLoop = startReminderLoop();
 
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'Shutting down');
-  clearInterval(reminderTimer);
+  await stopReminderLoop(reminderLoop);
   await app.close();
   await closePool();
   process.exit(0);

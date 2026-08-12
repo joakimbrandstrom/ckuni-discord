@@ -219,7 +219,7 @@ export async function getRide(rideId: string): Promise<Ride | null> {
 export async function listUpcomingRides(limit = 10): Promise<Ride[]> {
   const result = await pool.query<Ride>(
     `SELECT * FROM rides
-     WHERE status = 'scheduled' AND starts_at >= NOW() - INTERVAL '30 minutes'
+     WHERE status = 'scheduled' AND starts_at > NOW()
      ORDER BY starts_at ASC
      LIMIT $1`,
     [limit],

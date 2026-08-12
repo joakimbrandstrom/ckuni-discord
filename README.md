@@ -2,15 +2,16 @@
 
 Digital clubhouse for CK UNI cycling: Discord community, Zwift group rides and optional Strava activity matching.
 
-## What V0.1 includes
+## What v0.2 includes
 
 - HTTP-based Discord interactions — no Gateway/WebSocket process required
 - `/ping`
-- `/ride create`, `/ride list`, `/ride cancel`
+- `/ride create`, `/ride edit`, `/ride list`, `/ride cancel`
 - Join / Maybe buttons with live participant counts
 - Discord Scheduled Event creation for each ride
 - Automatic 24-hour and 30-minute reminders
 - PostgreSQL persistence
+- A deliberately bot-free `#spontan-rides` channel for informal member coordination
 - podman Compose deployment for a home server
 - Cloudflare Tunnel ingress with no router port-forward
 - Cloudflare Quick Tunnel profile for the first test
@@ -239,7 +240,11 @@ GitHub Issues are the source of truth for the project roadmap.
 3. **[v0.3 Strava & Attendance](https://github.com/joakimbrandstrom/ckuni-discord/issues/22)** — harden opt-in Strava integration, privacy controls, manual attendance and activity matching.
 4. **[v0.4 Winter Cup & Community](https://github.com/joakimbrandstrom/ckuni-discord/issues/23)** — seasons, participation scoring, weekly recaps, achievements and Discord interest roles.
 
-Future backlog includes [quick spontaneous rides](https://github.com/joakimbrandstrom/ckuni-discord/issues/18) and [outdoor club rides](https://github.com/joakimbrandstrom/ckuni-discord/issues/19).
+Spontaneous rides use normal messages and reactions in `#spontan-rides`; the bot does not create
+cards, events or reminders for them. Future backlog includes
+[outdoor club rides](https://github.com/joakimbrandstrom/ckuni-discord/issues/19).
+
+Before inviting riders, complete the [v0.2 pilot checklist](docs/PILOT_CHECKLIST.md).
 
 Priorities are encoded in issue titles: `P0` = required for the first deployment, `P1` = pilot/MVP usability, `P2` = Strava/attendance, `P3` = community features, and `P4` = future digital-clubhouse expansion.
 
