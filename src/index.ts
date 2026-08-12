@@ -4,11 +4,11 @@ import { closePool } from './db/pool.js';
 import { startReminderLoop, stopReminderLoop } from './reminders.js';
 
 const app = await buildApp();
-const reminderTimer = startReminderLoop();
+const reminderLoop = startReminderLoop();
 
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'Shutting down');
-  await stopReminderLoop(reminderTimer);
+  await stopReminderLoop(reminderLoop);
   await app.close();
   await closePool();
   process.exit(0);
