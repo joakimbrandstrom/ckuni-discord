@@ -136,6 +136,36 @@ test('sends the protected welcome payload for a matching guild member', async ()
   assert.equal(logs.entries[0]?.level, 'info');
 });
 
+test('logs a failed welcome send without exposing configuration secrets', async () => {
+  const failure = new Error('Discord unavailable');
+  const logs = recordingLogger();
+  await handleGuildMemberAdd(
+    { id: 'member-42', guild: { id: 'configured-guild' } },
+    {
+      guildId: 'configured-guild',
+      welcomeChannelId: 'welcome-channel',
+      channelIds: {
+        announcements: 'announcements-channel',
+        zwiftRide: 'zwift-channel',
+        general: 'general-channel',
+      },
+      fetchChannel: async () => ({
+        guildId: 'configured-guild',
+        canSend: true,
+        async send() {
+          throw failure;
+        },
+      }),
+      logger: logs.logger,
+    },
+  );
+
+  assert.equal(logs.entries[0]?.message, 'Failed to send Discord welcome message');
+  assert.equal(logs.entries[0]?.context.err, failure);
+  assert.equal(logs.entries[0]?.context.memberId, 'member-42');
+  assert.equal('token' in (logs.entries[0]?.context ?? {}), false);
+});
+
 test('does not create a Gateway client when the welcome channel is not configured', async () => {
   let clientsCreated = 0;
   const gateway = await startWelcomeGateway(
