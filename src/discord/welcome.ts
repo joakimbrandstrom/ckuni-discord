@@ -1,4 +1,5 @@
 import {
+  ChannelType,
   Client,
   Events,
   GatewayIntentBits,
@@ -137,7 +138,9 @@ function createDiscordClient(intents: GatewayIntentBits[]): WelcomeGatewayClient
       if (!channel) return null;
 
       const guildId = 'guildId' in channel ? channel.guildId : null;
-      if (!channel.isSendable() || !('guild' in channel)) return { guildId, canSend: false };
+      if (channel.type !== ChannelType.GuildText || !channel.isSendable()) {
+        return { guildId, canSend: false };
+      }
 
       const botMember = channel.guild.members.me;
       const canSend =
@@ -170,6 +173,7 @@ export async function startWelcomeGateway(
     announcementsChannelId?: string;
     zwiftRideChannelId?: string;
     generalChannelId?: string;
+    signal?: AbortSignal;
     logger: WelcomeLogger;
   },
   createClient: WelcomeClientFactory = createDiscordClient,
@@ -198,23 +202,39 @@ export async function startWelcomeGateway(
   };
 
   const client = createClient([GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]);
+  const pendingEvents = new Set<Promise<void>>();
   client.onMemberAdd((member) => {
-    void handleGuildMemberAdd(member, {
+    const event = handleGuildMemberAdd(member, {
       guildId: options.guildId,
       welcomeChannelId: options.welcomeChannelId as string,
       channelIds,
       fetchChannel: client.fetchChannel,
       logger: options.logger,
     });
+    pendingEvents.add(event);
+    void event.finally(() => pendingEvents.delete(event));
   });
   client.onError((error) => {
     options.logger.error({ err: error }, 'Discord welcome Gateway connection error');
   });
 
+  let startupAborted = options.signal?.aborted ?? false;
+  const abortStartup = () => {
+    startupAborted = true;
+    void client.destroy().catch((error) => {
+      options.logger.error({ err: error }, 'Failed to abort Discord welcome Gateway startup');
+    });
+  };
+  options.signal?.addEventListener('abort', abortStartup, { once: true });
+
   try {
+    if (startupAborted) throw new Error('Discord welcome Gateway startup was aborted');
     await client.login(options.token);
+    if (startupAborted) throw new Error('Discord welcome Gateway startup was aborted');
   } catch (error) {
-    options.logger.error({ err: error }, 'Discord welcome Gateway failed to start');
+    if (!startupAborted) {
+      options.logger.error({ err: error }, 'Discord welcome Gateway failed to start');
+    }
     await client.destroy().catch((destroyError) => {
       options.logger.error(
         { err: destroyError },
@@ -222,6 +242,8 @@ export async function startWelcomeGateway(
       );
     });
     throw new Error('Discord welcome Gateway could not start', { cause: error });
+  } finally {
+    options.signal?.removeEventListener('abort', abortStartup);
   }
 
   options.logger.info(
@@ -232,6 +254,7 @@ export async function startWelcomeGateway(
   return {
     async stop() {
       await client.destroy();
+      await Promise.allSettled(pendingEvents);
       options.logger.info({}, 'Discord welcome Gateway stopped');
     },
   };

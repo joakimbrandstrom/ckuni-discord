@@ -8,12 +8,14 @@ const app = await buildApp();
 let reminderLoop: ReminderLoop | null = null;
 let welcomeGateway: WelcomeGateway | null = null;
 let shutdownPromise: Promise<void> | null = null;
+const gatewayStartup = new AbortController();
 
 async function shutdown(reason: string, exitCode = 0): Promise<void> {
   if (shutdownPromise) return shutdownPromise;
 
   shutdownPromise = (async () => {
     app.log.info({ reason }, 'Shutting down');
+    gatewayStartup.abort();
     let shutdownFailed = false;
 
     const close = async (resource: string, work: () => Promise<void>) => {
@@ -49,11 +51,19 @@ try {
     announcementsChannelId: config.DISCORD_ANNOUNCEMENTS_CHANNEL_ID,
     zwiftRideChannelId: config.DISCORD_ZWIFT_RIDE_CHANNEL_ID,
     generalChannelId: config.DISCORD_GENERAL_CHANNEL_ID,
+    signal: gatewayStartup.signal,
     logger: app.log,
   });
-  reminderLoop = startReminderLoop();
-  await app.listen({ host: '0.0.0.0', port: config.PORT });
+  if (shutdownPromise) {
+    await stopWelcomeGateway(welcomeGateway);
+    welcomeGateway = null;
+  } else {
+    reminderLoop = startReminderLoop();
+    await app.listen({ host: '0.0.0.0', port: config.PORT });
+  }
 } catch (error) {
-  app.log.error({ err: error }, 'Application failed to start');
-  await shutdown('startup failure', 1);
+  if (!shutdownPromise) {
+    app.log.error({ err: error }, 'Application failed to start');
+    await shutdown('startup failure', 1);
+  }
 }

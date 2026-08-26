@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { setImmediate as flush } from 'node:timers/promises';
 import { GatewayIntentBits, type MessageCreateOptions } from 'discord.js';
 import {
   buildWelcomeMessage,
@@ -249,4 +250,92 @@ test('rejects incomplete channel references before creating a Gateway client', a
 
   assert.equal(clientsCreated, 0);
   assert.equal(logs.entries[0]?.message, 'Discord welcome Gateway configuration is incomplete');
+});
+
+test('stop waits for an in-flight member event', async () => {
+  let memberListener: ((member: { id: string; guild: { id: string } }) => void) | undefined;
+  let releaseSend: (() => void) | undefined;
+  let sendStarted: (() => void) | undefined;
+  const sending = new Promise<void>((resolve) => {
+    sendStarted = resolve;
+  });
+
+  const gateway = await startWelcomeGateway(
+    {
+      token: 'bot-token',
+      guildId: 'configured-guild',
+      welcomeChannelId: 'welcome-channel',
+      announcementsChannelId: 'announcements-channel',
+      zwiftRideChannelId: 'zwift-channel',
+      generalChannelId: 'general-channel',
+      logger: recordingLogger().logger,
+    },
+    () => ({
+      onMemberAdd(listener) {
+        memberListener = listener;
+      },
+      onError() {},
+      fetchChannel: async () => ({
+        guildId: 'configured-guild',
+        canSend: true,
+        send: async () => {
+          sendStarted?.();
+          await new Promise<void>((resolve) => {
+            releaseSend = resolve;
+          });
+        },
+      }),
+      async login() {},
+      async destroy() {},
+    }),
+  );
+
+  memberListener?.({ id: 'member-42', guild: { id: 'configured-guild' } });
+  await sending;
+  let stopped = false;
+  const stopping = stopWelcomeGateway(gateway).then(() => {
+    stopped = true;
+  });
+  await flush();
+  assert.equal(stopped, false);
+
+  releaseSend?.();
+  await stopping;
+  assert.equal(stopped, true);
+});
+
+test('an abort signal stops a Gateway that is still logging in', async () => {
+  const controller = new AbortController();
+  let rejectLogin: ((error: Error) => void) | undefined;
+  let destroys = 0;
+  const starting = startWelcomeGateway(
+    {
+      token: 'bot-token',
+      guildId: 'configured-guild',
+      welcomeChannelId: 'welcome-channel',
+      announcementsChannelId: 'announcements-channel',
+      zwiftRideChannelId: 'zwift-channel',
+      generalChannelId: 'general-channel',
+      signal: controller.signal,
+      logger: recordingLogger().logger,
+    },
+    () => ({
+      onMemberAdd() {},
+      onError() {},
+      fetchChannel: async () => null,
+      login: () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectLogin = reject;
+        }),
+      async destroy() {
+        destroys += 1;
+        rejectLogin?.(new Error('connection destroyed'));
+      },
+    }),
+  );
+  await flush();
+
+  controller.abort();
+  await assert.rejects(starting, /Discord welcome Gateway could not start/);
+  assert.ok(destroys >= 1);
 });
