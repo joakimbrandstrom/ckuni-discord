@@ -1,25 +1,59 @@
 import { buildApp } from './app.js';
 import { config } from './config.js';
 import { closePool } from './db/pool.js';
-import { startReminderLoop, stopReminderLoop } from './reminders.js';
+import { startWelcomeGateway, stopWelcomeGateway, type WelcomeGateway } from './discord/welcome.js';
+import { type ReminderLoop, startReminderLoop, stopReminderLoop } from './reminders.js';
 
 const app = await buildApp();
-const reminderLoop = startReminderLoop();
+let reminderLoop: ReminderLoop | null = null;
+let welcomeGateway: WelcomeGateway | null = null;
+let shutdownPromise: Promise<void> | null = null;
 
-async function shutdown(signal: string): Promise<void> {
-  app.log.info({ signal }, 'Shutting down');
-  await stopReminderLoop(reminderLoop);
-  await app.close();
-  await closePool();
-  process.exit(0);
+async function shutdown(reason: string, exitCode = 0): Promise<void> {
+  if (shutdownPromise) return shutdownPromise;
+
+  shutdownPromise = (async () => {
+    app.log.info({ reason }, 'Shutting down');
+    let shutdownFailed = false;
+
+    const close = async (resource: string, work: () => Promise<void>) => {
+      try {
+        await work();
+      } catch (error) {
+        shutdownFailed = true;
+        app.log.error({ err: error, resource }, 'Failed to shut down resource');
+      }
+    };
+
+    await close('Discord welcome Gateway', () => stopWelcomeGateway(welcomeGateway));
+    const activeReminderLoop = reminderLoop;
+    if (activeReminderLoop)
+      await close('reminder loop', () => stopReminderLoop(activeReminderLoop));
+    await close('Fastify', () => app.close());
+    await close('PostgreSQL pool', closePool);
+
+    process.exitCode = shutdownFailed && exitCode === 0 ? 1 : exitCode;
+  })();
+
+  return shutdownPromise;
 }
 
-process.on('SIGTERM', () => void shutdown('SIGTERM'));
-process.on('SIGINT', () => void shutdown('SIGINT'));
+process.once('SIGTERM', () => void shutdown('SIGTERM'));
+process.once('SIGINT', () => void shutdown('SIGINT'));
 
 try {
+  welcomeGateway = await startWelcomeGateway({
+    token: config.DISCORD_BOT_TOKEN,
+    guildId: config.DISCORD_GUILD_ID,
+    welcomeChannelId: config.DISCORD_WELCOME_CHANNEL_ID,
+    announcementsChannelId: config.DISCORD_ANNOUNCEMENTS_CHANNEL_ID,
+    zwiftRideChannelId: config.DISCORD_ZWIFT_RIDE_CHANNEL_ID,
+    generalChannelId: config.DISCORD_GENERAL_CHANNEL_ID,
+    logger: app.log,
+  });
+  reminderLoop = startReminderLoop();
   await app.listen({ host: '0.0.0.0', port: config.PORT });
 } catch (error) {
-  app.log.error(error);
-  process.exit(1);
+  app.log.error({ err: error }, 'Application failed to start');
+  await shutdown('startup failure', 1);
 }

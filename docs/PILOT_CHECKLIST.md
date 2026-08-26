@@ -1,22 +1,21 @@
 # Checklista för v0.2-piloten
 
 Använd checklistan med en `Ledare`, ett separat medlemskonto och vid behov ett gästkonto. Kör
-piloten i `#zwift-rides` och `#spontan-rides` efter att kanaler och roller har konfigurerats enligt
-[Discord-guiden](DISCORD_SETUP.md).
+piloten i de befintliga kanalerna `#zwift-ride` och `#allmänt` efter att kanal-ID:n, behörigheter och
+roller har konfigurerats enligt [Discord-guiden](DISCORD_SETUP.md).
 
 ## Före testet
 
 - [ ] Driftsätt senaste `main`, kör databasmigreringarna och registrera Discord-kommandona.
 - [ ] Ställ in roll-ID:n för `Ledare` och `System Admin`; lämna dem inte tomma i piloten.
-- [ ] Skapa kanalerna och behörigheterna manuellt, inklusive läsbehörighet utan skriv-/reaktionsrätt
-      för `Gäst` i `#spontan-rides`.
+- [ ] Kontrollera behörigheterna i de befintliga kanalerna; boten ska inte skapa nya kanaler.
 
 ## Acceptanstest
 
 1. [ ] Skapa ett riktigt eller testbaserat CK UNI Club Event i Zwift.
 2. [ ] Kopiera Zwift-evenemangets URL och uppgifter.
 3. [ ] Kör `/ride create` som `Ledare`, fyll i formuläret och klistra in Zwift-uppgifterna.
-4. [ ] Kontrollera att exakt ett passkort visas i `#zwift-rides` och exakt ett Discord Scheduled
+4. [ ] Kontrollera att exakt ett passkort visas i `#zwift-ride` och exakt ett Discord Scheduled
        Event skapas med rätt tid, längd och detaljer.
 5. [ ] Välj `Jag kommer` och sedan `Kanske` från ett annat Discord-konto. Kontrollera att valet och
        räknarna uppdateras.
@@ -30,10 +29,10 @@ piloten i `#zwift-rides` och `#spontan-rides` efter att kanaler och roller har k
        deltagarvalen finns kvar och att inga dubbletter publiceras.
 10. [ ] Skapa ett testpass ungefär 35 minuter framåt. Låt boten köra och kontrollera att den svenska
         30-minuterspåminnelsen skickas en gång, även om boten startas om efter att den skickats.
-11. [ ] Skriv ett vanligt meddelande om ett spontanpass i `#spontan-rides`, gärna med en Zwift- eller
-        Meetup-länk.
-12. [ ] Kontrollera att en annan `CK UNI Rider` kan svara och reagera utan boten, och att `Gäst` kan
-        läsa men inte skriva eller reagera.
+11. [ ] Skriv ett vanligt meddelande om ett spontanpass i `#allmänt`, gärna med en Zwift- eller
+         Meetup-länk.
+12. [ ] Kontrollera att en annan medlem kan svara och reagera utan att boten skapar passkort,
+         Scheduled Event eller påminnelser för förslaget.
 
 ## Pilotens utfall
 

@@ -28,6 +28,32 @@ Enable Developer Mode in Discord, right-click the CK UNI server and copy its ser
 
 Guild commands are used in development because registration updates appear quickly.
 
+## Automatic welcome messages
+
+Use the existing `#välkommen` channel under **Information**. The bot does not create or rename
+Discord channels. To copy an ID, enable **User Settings → Advanced → Developer Mode**, right-click
+the channel and select **Copy Channel ID**.
+
+Copy the IDs for the four existing text channels into `.env`:
+
+```dotenv
+DISCORD_WELCOME_CHANNEL_ID=...
+DISCORD_ANNOUNCEMENTS_CHANNEL_ID=...
+DISCORD_ZWIFT_RIDE_CHANNEL_ID=...
+DISCORD_GENERAL_CHANNEL_ID=...
+```
+
+`DISCORD_WELCOME_CHANNEL_ID` enables the feature and selects where the message is sent. The other
+three IDs create clickable channel references in the message. If the feature is enabled, all four
+values must be configured.
+
+In **Discord Developer Portal → Bot → Privileged Gateway Intents**, enable **Server Members
+Intent**. In `#välkommen`, give the bot **View Channel**, **Send Messages** and **Embed Links**.
+
+The Gateway connection is outbound from the existing bot process. It needs no new listening port,
+router rule or Cloudflare Tunnel change; Cloudflare Tunnel remains only for incoming HTTP traffic.
+Only members who join after the Gateway client has started receive the automatic message.
+
 ## Interaction endpoint
 
 After the public HTTPS endpoint works, configure the application's Interactions Endpoint URL as:
@@ -70,29 +96,31 @@ If both role ID settings are empty, ride management is intentionally open to eve
 for local development and testing. Configure at least one role ID before running a controlled
 pilot.
 
-### Recommended channel structure
+### Existing channel structure
 
-Create these channels manually in Discord; the bot does not bootstrap or manage server channels.
+The bot uses the server's existing channels and does not bootstrap or manage them.
 
 ```text
 💬 Community
   #allmänt
 
+🔊 Röstkanaler
+  Zwift Ride 1
+  Zwift Ride 2
+
 ℹ️ Information
   #välkommen
   #annonseringar
 
-🚴 Cycling
-  #zwift-rides
-  #spontan-rides
-  🔊 Zwift Ride
+🚴 Cykling
+  #zwift-ride
 
 🔒 Ledare
   #snack
-  🔊 Röst
+  Röst
 ```
 
-### `#zwift-rides`: official CK UNI Zwift rides
+### `#zwift-ride`: official CK UNI Zwift rides
 
 This is the publication channel for structured rides that a `Ledare` has already created as a
 Zwift Club Event. The leader manually copies its URL and details into `/ride create`. The bot never
@@ -116,27 +144,13 @@ Suggested channel topic:
 
 > Officiella CK UNI-pass på Zwift. Ledare publicerar pass; välj Jag kommer eller Kanske på passkortet.
 
-### `#spontan-rides`: informal coordination
+### `#allmänt`: community and informal coordination
 
-This channel is intentionally just Discord chat. `CK UNI Rider` may view it, send messages and add
-reactions. Riders may paste a Zwift event or Meetup link when they have one, but no link or special
-format is required. Do not add bot cards, Scheduled Events, reminders, attendance, leaderboard
-credit or a `/ride quick` workflow.
+This channel is normal Discord chat for discussions, questions and spontaneous ride suggestions.
+Members may paste a Zwift event or Meetup link when they have one, but no link or special format is
+required. The bot does not create cards, Scheduled Events or reminders for spontaneous suggestions.
 
-Give `Gäst` read-only access for the pilot: allow **View Channel** and **Read Message History**, but
-deny **Send Messages**, **Add Reactions** and **Use Application Commands** in this channel. A guest
-can therefore see informal coordination without joining it. `Ledare` and `System Admin` can
-moderate normally.
+### Voice channels
 
-Suggested channel topic:
-
-> Spontana och informella cykelpass. Skriv när, var och ungefär vilket tempo – svara eller reagera om du vill haka på. Ingen officiell CK UNI-aktivitet.
-
-Suggested pinned message:
-
-> **Spontanpass**
->
-> Skriv ett vanligt meddelande med när du tänker köra, typ av pass och ungefärligt tempo. Lägg gärna
-> till en Zwift- eller Meetup-länk om du har en. Andra cyklister svarar eller reagerar direkt i
-> kanalen. Pass här är informella: boten skapar inget passkort eller evenemang, skickar inga
-> påminnelser och räknar inte deltagandet i topplistor.
+`Zwift Ride 1` and `Zwift Ride 2` under **Röstkanaler** are used for communication during group
+rides. `Röst` under **Ledare** remains the leaders' voice channel.
