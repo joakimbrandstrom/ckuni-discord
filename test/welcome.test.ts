@@ -173,7 +173,7 @@ test('starts with only the required intents and stops the Gateway client', async
     (intents) => {
       capturedIntents = intents;
       return {
-        onMemberAdd() {},
+        onMemberAdd: () => () => undefined,
         onError() {},
         fetchChannel: async () => null,
         async login(token) {
@@ -210,7 +210,7 @@ test('cleans up and rejects when the configured Gateway cannot start', async () 
         logger: logs.logger,
       },
       () => ({
-        onMemberAdd() {},
+        onMemberAdd: () => () => undefined,
         onError() {},
         fetchChannel: async () => null,
         async login() {
@@ -273,6 +273,9 @@ test('stop waits for an in-flight member event', async () => {
     () => ({
       onMemberAdd(listener) {
         memberListener = listener;
+        return () => {
+          memberListener = undefined;
+        };
       },
       onError() {},
       fetchChannel: async () => ({
@@ -320,7 +323,7 @@ test('an abort signal stops a Gateway that is still logging in', async () => {
       logger: recordingLogger().logger,
     },
     () => ({
-      onMemberAdd() {},
+      onMemberAdd: () => () => undefined,
       onError() {},
       fetchChannel: async () => null,
       login: () =>

@@ -27,7 +27,7 @@ type WelcomeChannel =
     };
 
 type WelcomeGatewayClient = {
-  onMemberAdd: (listener: (member: WelcomeMember) => void) => void;
+  onMemberAdd: (listener: (member: WelcomeMember) => void) => () => void;
   onError: (listener: (error: Error) => void) => void;
   fetchChannel: (channelId: string) => Promise<WelcomeChannel | null>;
   login: (token: string) => Promise<void>;
@@ -127,7 +127,9 @@ function createDiscordClient(intents: GatewayIntentBits[]): WelcomeGatewayClient
 
   return {
     onMemberAdd(listener) {
-      client.on(Events.GuildMemberAdd, listener as (member: GuildMember) => void);
+      const discordListener = (member: GuildMember) => listener(member);
+      client.on(Events.GuildMemberAdd, discordListener);
+      return () => client.off(Events.GuildMemberAdd, discordListener);
     },
     onError(listener) {
       client.on(Events.Error, listener);
@@ -203,7 +205,7 @@ export async function startWelcomeGateway(
 
   const client = createClient([GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]);
   const pendingEvents = new Set<Promise<void>>();
-  client.onMemberAdd((member) => {
+  const stopMemberEvents = client.onMemberAdd((member) => {
     const event = handleGuildMemberAdd(member, {
       guildId: options.guildId,
       welcomeChannelId: options.welcomeChannelId as string,
@@ -232,6 +234,7 @@ export async function startWelcomeGateway(
     await client.login(options.token);
     if (startupAborted) throw new Error('Discord welcome Gateway startup was aborted');
   } catch (error) {
+    stopMemberEvents();
     if (!startupAborted) {
       options.logger.error({ err: error }, 'Discord welcome Gateway failed to start');
     }
@@ -253,8 +256,9 @@ export async function startWelcomeGateway(
 
   return {
     async stop() {
-      await client.destroy();
+      stopMemberEvents();
       await Promise.allSettled(pendingEvents);
+      await client.destroy();
       options.logger.info({}, 'Discord welcome Gateway stopped');
     },
   };
