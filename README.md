@@ -4,14 +4,14 @@ Digital clubhouse for CK UNI cycling: Discord community, Zwift group rides and o
 
 ## What v0.2 includes
 
-- HTTP-based Discord interactions — no Gateway/WebSocket process required
+- HTTP-based Discord interactions, plus an optional outbound Gateway connection for member joins
 - `/ping`
 - `/ride create`, `/ride edit`, `/ride list`, `/ride cancel`
 - Join / Maybe buttons with live participant counts
 - Discord Scheduled Event creation for each ride
 - Automatic 24-hour and 30-minute reminders
 - PostgreSQL persistence
-- A deliberately bot-free `#spontan-rides` channel for informal member coordination
+- Optional automatic welcome messages with links to the server's existing channels
 - podman Compose deployment for a home server
 - Cloudflare Tunnel ingress with no router port-forward
 - Cloudflare Quick Tunnel profile for the first test
@@ -24,22 +24,27 @@ Digital clubhouse for CK UNI cycling: Discord community, Zwift group rides and o
 ## Architecture
 
 ```text
-Discord / Strava
-      |
-      v
-Cloudflare HTTPS
-      |
-      v
+Discord interactions / Strava
+            |
+            v
+      Cloudflare HTTPS
+            |
+            v
 Cloudflare Tunnel (outbound-only)
-      |
-      v
-cloudflared container
-      |
-      v
+            |
+            v
+    cloudflared container
+            |
+            v
 CK UNI bot (Fastify/TypeScript) ---> PostgreSQL
+            |
+            +---> Discord Gateway (optional, outbound-only member events)
 ```
 
 Discord remains the UI. Zwift remains the place where the ride happens. Strava is only used for opt-in activity data. The rest of the home server can remain behind VPN/Tailscale.
+
+Commands, buttons and forms continue to use signed HTTP interactions. The optional Gateway client
+only receives member events used by automatic welcome messages.
 
 ## 1. Create the Discord application
 
@@ -67,6 +72,15 @@ DISCORD_APPLICATION_ID=...
 DISCORD_PUBLIC_KEY=...
 DISCORD_BOT_TOKEN=...
 DISCORD_GUILD_ID=...
+```
+
+To enable automatic welcome messages, also set the four existing channel IDs:
+
+```dotenv
+DISCORD_WELCOME_CHANNEL_ID=...
+DISCORD_ANNOUNCEMENTS_CHANNEL_ID=...
+DISCORD_ZWIFT_RIDE_CHANNEL_ID=...
+DISCORD_GENERAL_CHANNEL_ID=...
 ```
 
 Do not commit `.env`.
@@ -240,8 +254,8 @@ GitHub Issues are the source of truth for the project roadmap.
 3. **[v0.3 Strava & Attendance](https://github.com/joakimbrandstrom/ckuni-discord/issues/22)** — harden opt-in Strava integration, privacy controls, manual attendance and activity matching.
 4. **[v0.4 Winter Cup & Community](https://github.com/joakimbrandstrom/ckuni-discord/issues/23)** — seasons, participation scoring, weekly recaps, achievements and Discord interest roles.
 
-Spontaneous rides use normal messages and reactions in `#spontan-rides`; the bot does not create
-cards, events or reminders for them. Future backlog includes
+Spontaneous ride suggestions use normal messages and reactions in `#allmänt`; the bot does not
+create cards, events or reminders for them. Future backlog includes
 [outdoor club rides](https://github.com/joakimbrandstrom/ckuni-discord/issues/19).
 
 Before inviting riders, complete the [v0.2 pilot checklist](docs/PILOT_CHECKLIST.md).
