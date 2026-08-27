@@ -1,6 +1,20 @@
 import { DateTime } from 'luxon';
 import type { Ride } from './repository.js';
 
+type RideCardData = Pick<
+  Ride,
+  | 'title'
+  | 'description'
+  | 'ride_type'
+  | 'starts_at'
+  | 'duration_minutes'
+  | 'zwift_url'
+  | 'route_world'
+  | 'pace_workout'
+  | 'notes'
+  | 'status'
+>;
+
 const icons: Record<string, string> = {
   social: '☕',
   intervals: '⚡',
@@ -17,11 +31,12 @@ const typeNames: Record<string, string> = {
   outdoor: 'Utomhus',
 };
 
-export function rideMessage(
-  ride: Ride,
+function rideEmbed(
+  ride: RideCardData,
   counts: { going: number; maybe: number },
   timezone: string,
-): Record<string, unknown> {
+  rideId?: string,
+): Record<string, string> {
   const local = DateTime.fromJSDate(new Date(ride.starts_at), {
     zone: 'utc',
   })
@@ -39,18 +54,27 @@ export function rideMessage(
     ride.notes ? `📝 ${ride.notes}` : undefined,
     '',
     `✅ Kommer: **${counts.going}**   🤔 Kanske: **${counts.maybe}**`,
-    `Pass-ID: \`${ride.id}\``,
+    rideId ? `Pass-ID: \`${rideId}\`` : undefined,
   ]
     .filter((line) => line !== undefined)
     .join('\n');
+  if (description.length > 4096) {
+    throw new Error('Passuppgifterna är för långa för ett Discord-passkort. Korta ned detaljerna.');
+  }
 
   return {
-    embeds: [
-      {
-        title: ride.status === 'cancelled' ? `🚫 INSTÄLLT — ${ride.title}` : `🚴 ${ride.title}`,
-        description,
-      },
-    ],
+    title: ride.status === 'cancelled' ? `🚫 INSTÄLLT — ${ride.title}` : `🚴 ${ride.title}`,
+    description,
+  };
+}
+
+export function rideMessage(
+  ride: Ride,
+  counts: { going: number; maybe: number },
+  timezone: string,
+): Record<string, unknown> {
+  return {
+    embeds: [rideEmbed(ride, counts, timezone, ride.id)],
     components: [
       {
         type: 1,
@@ -73,4 +97,11 @@ export function rideMessage(
       },
     ],
   };
+}
+
+export function ridePreviewEmbed(
+  ride: Omit<RideCardData, 'status'>,
+  timezone: string,
+): Record<string, string> {
+  return rideEmbed({ ...ride, status: 'scheduled' }, { going: 1, maybe: 0 }, timezone);
 }

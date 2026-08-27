@@ -18,6 +18,7 @@ process.env.TOKEN_ENCRYPTION_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
 
 let db: typeof import('../../src/db/pool.js');
 let rides: typeof import('../../src/rides/repository.js');
+let drafts: typeof import('../../src/rides/drafts.js');
 let strava: typeof import('../../src/strava/service.js');
 
 before(async () => {
@@ -26,6 +27,7 @@ before(async () => {
   const { migrate } = await import('../../src/db/migrate.js');
   await migrate(db.pool);
   rides = await import('../../src/rides/repository.js');
+  drafts = await import('../../src/rides/drafts.js');
   strava = await import('../../src/strava/service.js');
 });
 
@@ -39,7 +41,7 @@ integration('migrations are repeatable', async () => {
   const result = await db.pool.query('SELECT filename FROM schema_migrations ORDER BY filename');
   assert.deepEqual(
     result.rows.map((row) => row.filename),
-    ['001_init.sql', '002_ride_metadata_and_templates.sql'],
+    ['001_init.sql', '002_ride_metadata_and_templates.sql', '003_ride_creation_drafts.sql'],
   );
 });
 
@@ -195,6 +197,123 @@ integration(
       (error: unknown) => (error as { code?: string }).code === '23505',
     );
     assert.equal((await rides.disableRideTemplate(template.id))?.active, false);
+  },
+);
+
+integration(
+  'ride drafts persist, enforce ownership and create one ride on publication',
+  async () => {
+    const suffix = String(Date.now());
+    const owner = `draft-owner-${suffix}`;
+    const other = `draft-other-${suffix}`;
+    await rides.upsertUser(owner, 'Draft owner');
+    await rides.upsertUser(other, 'Other leader');
+    const template = await rides.createRideTemplate({
+      name: `Draft template ${suffix}`,
+      title: 'Tisdagsintervaller',
+      description: 'Fyra block',
+      rideType: 'intervals',
+      durationMinutes: 60,
+      routeWorld: 'Watopia',
+      paceWorkout: '2,5 W/kg',
+      notes: 'Samling i röstkanalen',
+      creatorDiscordId: owner,
+    });
+
+    const draft = await drafts.createRideDraftFromTemplate(owner, template.id, 'ride-channel');
+    assert.ok(draft);
+    assert.equal(draft.title, 'Tisdagsintervaller');
+    assert.equal(await drafts.getRideDraft(draft.id, other), null);
+    assert.equal(
+      (
+        await db.pool.query('SELECT COUNT(*)::int AS count FROM rides WHERE creation_draft_id=$1', [
+          draft.id,
+        ])
+      ).rows[0].count,
+      0,
+    );
+
+    const startsAt = new Date(Date.now() + 86_400_000);
+    await drafts.updateRideDraftSchedule(draft.id, owner, {
+      startsAt,
+      zwiftUrl: 'https://zwift.test/draft',
+      extraComment: 'Ta med vatten.',
+    });
+    await assert.rejects(
+      () => drafts.prepareRideDraftPublication(draft.id, other),
+      (error: unknown) => (error as { code?: string }).code === 'not_found',
+    );
+
+    const first = await drafts.prepareRideDraftPublication(draft.id, owner);
+    const second = await drafts.prepareRideDraftPublication(draft.id, owner);
+    assert.equal(first.ride.id, second.ride.id);
+    assert.equal(first.ride.notes, 'Samling i röstkanalen\nTa med vatten.');
+    assert.deepEqual(await rides.participantCounts(first.ride.id), { going: 1, maybe: 0 });
+    assert.equal(
+      (
+        await db.pool.query('SELECT COUNT(*)::int AS count FROM rides WHERE creation_draft_id=$1', [
+          draft.id,
+        ])
+      ).rows[0].count,
+      1,
+    );
+
+    const copied = await drafts.createRideDraftFromLatestRide(owner, 'other-channel');
+    assert.ok(copied);
+    assert.equal(copied.title, first.ride.title);
+    assert.equal(copied.starts_at, null);
+    assert.equal(copied.zwift_url, null);
+    assert.equal(copied.published_ride_id, null);
+    assert.equal(copied.status, 'active');
+
+    await db.pool.query("UPDATE rides SET starts_at=NOW() - INTERVAL '1 minute' WHERE id=$1", [
+      first.ride.id,
+    ]);
+    await assert.rejects(
+      () => drafts.prepareRideDraftPublication(draft.id, owner),
+      (error: unknown) => (error as { code?: string }).code === 'expired',
+    );
+    assert.equal(
+      (await db.pool.query('SELECT status FROM ride_drafts WHERE id=$1', [draft.id])).rows[0]
+        .status,
+      'expired',
+    );
+
+    await db.pool.query(
+      "UPDATE ride_drafts SET expires_at=NOW() - INTERVAL '1 minute' WHERE id=$1",
+      [copied.id],
+    );
+    await assert.rejects(
+      () => drafts.prepareRideDraftPublication(copied.id, owner),
+      (error: unknown) => (error as { code?: string }).code === 'expired',
+    );
+    assert.equal(
+      (await db.pool.query('SELECT status FROM ride_drafts WHERE id=$1', [copied.id])).rows[0]
+        .status,
+      'expired',
+    );
+
+    const inactiveTemplate = await rides.createRideTemplate({
+      name: `Inactive draft template ${suffix}`,
+      title: 'Distanspass',
+      rideType: 'endurance',
+      durationMinutes: 90,
+      creatorDiscordId: owner,
+    });
+    const inactiveDraft = await drafts.createRideDraftFromTemplate(
+      owner,
+      inactiveTemplate.id,
+      'ride-channel',
+    );
+    assert.ok(inactiveDraft);
+    await drafts.updateRideDraftSchedule(inactiveDraft.id, owner, {
+      startsAt: new Date(Date.now() + 172_800_000),
+    });
+    await rides.disableRideTemplate(inactiveTemplate.id);
+    await assert.rejects(
+      () => drafts.prepareRideDraftPublication(inactiveDraft.id, owner),
+      (error: unknown) => (error as { code?: string }).code === 'template_inactive',
+    );
   },
 );
 

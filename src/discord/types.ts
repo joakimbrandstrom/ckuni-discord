@@ -11,6 +11,16 @@ export type DiscordOption = {
   options?: DiscordOption[];
 };
 
+export type DiscordComponent = {
+  type: number;
+  id?: number;
+  custom_id?: string;
+  value?: string;
+  values?: string[];
+  components?: DiscordComponent[];
+  component?: DiscordComponent;
+};
+
 export type DiscordInteraction = {
   id: string;
   type: number;
@@ -23,12 +33,10 @@ export type DiscordInteraction = {
   data?: {
     name?: string;
     custom_id?: string;
+    component_type?: number;
+    values?: string[];
     options?: DiscordOption[];
-    components?: Array<{
-      type: number;
-      components?: Array<{ type: number; custom_id?: string; value?: string }>;
-      component?: { type: number; custom_id?: string; value?: string };
-    }>;
+    components?: DiscordComponent[];
   };
   message?: {
     id: string;

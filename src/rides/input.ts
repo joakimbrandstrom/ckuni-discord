@@ -24,7 +24,7 @@ function required(value: string | undefined, label: string): string {
   return trimmed;
 }
 
-function parseDuration(value: string | undefined): number {
+export function parseDuration(value: string | undefined): number {
   const duration = Number(required(value, 'Längd'));
   if (!Number.isInteger(duration) || duration < 15 || duration > 600) {
     throw new Error('Längden måste vara ett heltal mellan 15 och 600 minuter.');
@@ -32,7 +32,7 @@ function parseDuration(value: string | undefined): number {
   return duration;
 }
 
-function parseRideType(value: string | undefined): RideType {
+export function parseRideType(value: string | undefined): RideType {
   const typeInput = required(value, 'Typ').toLowerCase();
   const aliases: Record<string, RideType> = {
     social: 'social',
@@ -59,10 +59,91 @@ function parseFutureStart(value: string | undefined, timezone: string, now: Date
   if (!match) throw new Error('Datum och tid måste skrivas som ÅÅÅÅ-MM-DD TT:mm.');
 
   const startsAt = parseLocalRideStart(match[1], match[2], timezone);
-  if (startsAt.getTime() < now.getTime() - 60_000) {
+  if (startsAt.getTime() <= now.getTime()) {
     throw new Error('Starttiden måste ligga i framtiden.');
   }
   return startsAt;
+}
+
+function parseSeparateFutureStart(
+  dateValue: string | undefined,
+  timeValue: string | undefined,
+  timezone: string,
+  now: Date,
+): Date {
+  const date = required(dateValue, 'Datum');
+  const time = required(timeValue, 'Tid');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error('Datum måste skrivas som ÅÅÅÅ-MM-DD.');
+  }
+  if (!/^\d{2}:\d{2}$/.test(time)) throw new Error('Tid måste skrivas som TT:mm.');
+  const startsAt = parseLocalRideStart(date, time, timezone);
+  if (startsAt.getTime() <= now.getTime()) throw new Error('Starttiden måste ligga i framtiden.');
+  return startsAt;
+}
+
+function optional(value: string | undefined): string | undefined {
+  return value?.trim() || undefined;
+}
+
+function parseHttpUrl(value: string | undefined): string | undefined {
+  const trimmed = optional(value);
+  if (!trimmed) return undefined;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new Error('Zwift-länken är inte en giltig webbadress.');
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('Zwift-länken måste börja med http:// eller https://.');
+  }
+  return trimmed;
+}
+
+export function parseRideBasicFields(
+  fields: Record<string, string | undefined>,
+  timezone: string,
+  now = new Date(),
+): Pick<CreateRideFields, 'title' | 'startsAt' | 'durationMinutes' | 'rideType'> {
+  return {
+    title: required(fields.title, 'Titel'),
+    startsAt: parseSeparateFutureStart(fields.date, fields.time, timezone, now),
+    durationMinutes: parseDuration(fields.duration),
+    rideType: parseRideType(fields.ride_type),
+  };
+}
+
+export function parseRideScheduleFields(
+  fields: Record<string, string | undefined>,
+  timezone: string,
+  now = new Date(),
+): { startsAt: Date; zwiftUrl?: string; extraComment?: string } {
+  return {
+    startsAt: parseSeparateFutureStart(fields.date, fields.time, timezone, now),
+    zwiftUrl: parseHttpUrl(fields.zwift_url),
+    extraComment: optional(fields.extra_comment),
+  };
+}
+
+export function parseRideDetailFields(fields: Record<string, string | undefined>): {
+  description?: string;
+  zwiftUrl?: string;
+  routeWorld?: string;
+  paceWorkout?: string;
+  notes?: string;
+} {
+  const details = {
+    zwiftUrl: parseHttpUrl(fields.zwift_url),
+    description: optional(fields.description),
+    routeWorld: optional(fields.route_world),
+    paceWorkout: optional(fields.pace_workout),
+    notes: optional(fields.notes),
+  };
+  if (Object.values(details).filter(Boolean).join('\n').length > 3500) {
+    throw new Error('Passuppgifterna är för långa. Korta ned detaljerna.');
+  }
+  return details;
 }
 
 export function parseRideDetails(value: string | undefined): {
@@ -95,18 +176,7 @@ export function parseRideDetails(value: string | undefined): {
     else if (key === 'zwift') fields.zwift = [match[2]];
     else if (key === 'anteckningar') fields.notes = [match[2]];
   }
-  const urlValue = fields.zwift?.join(' ').trim() || undefined;
-  if (urlValue) {
-    let url: URL;
-    try {
-      url = new URL(urlValue);
-    } catch {
-      throw new Error('Zwift-länken är inte en giltig webbadress.');
-    }
-    if (!['http:', 'https:'].includes(url.protocol)) {
-      throw new Error('Zwift-länken måste börja med http:// eller https://.');
-    }
-  }
+  const urlValue = parseHttpUrl(fields.zwift?.join(' '));
 
   return {
     description: descriptions.filter(Boolean).join('\n') || undefined,
