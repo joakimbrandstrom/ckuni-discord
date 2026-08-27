@@ -16,6 +16,10 @@ const schema = z.object({
   DISCORD_GUILD_ID: z.string().min(1),
   DISCORD_RIDE_LEADER_ROLE_ID: optionalNonEmpty,
   DISCORD_ADMIN_ROLE_ID: optionalNonEmpty,
+  DISCORD_WELCOME_CHANNEL_ID: optionalNonEmpty,
+  DISCORD_ANNOUNCEMENTS_CHANNEL_ID: optionalNonEmpty,
+  DISCORD_ZWIFT_RIDE_CHANNEL_ID: optionalNonEmpty,
+  DISCORD_GENERAL_CHANNEL_ID: optionalNonEmpty,
 
   STRAVA_CLIENT_ID: optionalNonEmpty,
   STRAVA_CLIENT_SECRET: optionalNonEmpty,
