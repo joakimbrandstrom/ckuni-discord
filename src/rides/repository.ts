@@ -16,6 +16,7 @@ export type Ride = {
   pace_workout: string | null;
   notes: string | null;
   template_id: string | null;
+  creation_draft_id: string | null;
   status: string;
 };
 
@@ -167,6 +168,13 @@ export async function getRideTemplate(templateId: string): Promise<RideTemplate 
 export async function listRideTemplates(): Promise<RideTemplate[]> {
   const result = await pool.query<RideTemplate>(
     'SELECT * FROM ride_templates ORDER BY active DESC, name ASC',
+  );
+  return result.rows;
+}
+
+export async function listActiveRideTemplates(): Promise<RideTemplate[]> {
+  const result = await pool.query<RideTemplate>(
+    'SELECT * FROM ride_templates WHERE active=TRUE ORDER BY name ASC',
   );
   return result.rows;
 }

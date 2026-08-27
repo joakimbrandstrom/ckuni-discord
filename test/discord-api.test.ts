@@ -17,6 +17,7 @@ const {
   createScheduledEvent,
   editChannelMessage,
   editOriginalInteractionResponse,
+  findScheduledEventByDescriptionMarker,
   registerGuildCommands,
   sendChannelMessage,
   updateScheduledEvent,
@@ -88,6 +89,33 @@ test('cancelScheduledEvent and sendChannelMessage use their expected Discord end
       },
     ],
   );
+});
+
+test('uses a Discord nonce for idempotent messages and reconciles scheduled events', async () => {
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init });
+    if (init?.method === 'GET') {
+      return new Response(
+        JSON.stringify([
+          { id: 'other-event', description: 'Annat pass' },
+          { id: 'ride-event', description: 'Intervaller\nCK UNI Pass-ID: 42' },
+        ]),
+        { status: 200 },
+      );
+    }
+    return new Response(JSON.stringify({ id: 'message-42' }), { status: 200 });
+  };
+
+  assert.equal(
+    await sendChannelMessage('channel-123', { content: 'Pass' }, 'ckuni-ride-42'),
+    'message-42',
+  );
+  assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
+    content: 'Pass',
+    nonce: 'ckuni-ride-42',
+    enforce_nonce: true,
+  });
+  assert.equal(await findScheduledEventByDescriptionMarker('CK UNI Pass-ID: 42'), 'ride-event');
 });
 
 test('updates scheduled events and existing channel messages', async () => {

@@ -2,14 +2,9 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { DateTime } from 'luxon';
 import { config } from '../config.js';
 import { rideMessage } from '../rides/card.js';
-import {
-  parseCreateRideFields,
-  parseTemplateFields,
-  parseTemplateRideFields,
-} from '../rides/input.js';
+import { parseCreateRideFields, parseTemplateFields } from '../rides/input.js';
 import {
   cancelRide,
-  createRide,
   createRideTemplate,
   disableRideTemplate,
   getLeaderboard,
@@ -19,7 +14,6 @@ import {
   listUpcomingRides,
   participantCounts,
   setDiscordEventId,
-  setDiscordMessageId,
   setParticipant,
   updateRide,
   updateRideTemplate,
@@ -31,11 +25,23 @@ import {
   createScheduledEvent,
   editChannelMessage,
   editOriginalInteractionResponse,
-  sendChannelMessage,
   updateScheduledEvent,
 } from './api.js';
 import { isRideManager } from './auth.js';
 import { runDiscordBackgroundTask, waitForDiscordBackgroundTasks } from './background.js';
+import {
+  modalValues,
+  RIDE_TYPE_SELECT_OPTIONS,
+  stringSelectLabel,
+  textInputLabel,
+} from './components.js';
+import {
+  handleRideCreateComponent,
+  handleRideCreateModal,
+  openRideCreateBuilder,
+  openTemplateRideDraft,
+} from './ride-create.js';
+import { scheduledEventInput } from './ride-publication.js';
 import { verifyDiscordSignature } from './signature.js';
 import type { DiscordInteraction, DiscordOption, DiscordUser } from './types.js';
 
@@ -66,40 +72,6 @@ function value<T extends string | number>(
   name: string,
 ): T | undefined {
   return options?.find((option) => option.name === name)?.value as T | undefined;
-}
-
-function scheduledEventLocation(zwiftUrl: string | undefined, rideType: string): string {
-  if (zwiftUrl) return 'Zwift + Discord-röstkanal';
-  if (rideType === 'outdoor') return 'CK UNI-pass utomhus';
-  return 'Discord / Zwift';
-}
-
-function textInput(
-  customId: string,
-  label: string,
-  options: {
-    placeholder?: string;
-    required?: boolean;
-    style?: number;
-    maxLength?: number;
-    value?: string;
-  } = {},
-): Record<string, unknown> {
-  return {
-    type: 1,
-    components: [
-      {
-        type: 4,
-        custom_id: customId,
-        label,
-        style: options.style ?? 1,
-        required: options.required ?? true,
-        placeholder: options.placeholder,
-        max_length: options.maxLength,
-        value: options.value?.slice(0, options.maxLength),
-      },
-    ],
-  };
 }
 
 function detailsValue(input: {
@@ -142,27 +114,30 @@ function rideModal(
       custom_id: customId,
       title: modalTitle,
       components: [
-        textInput('title', 'Titel', {
+        textInputLabel('title', 'Titel', {
           placeholder: 'Tisdagens intervaller',
           maxLength: 100,
           value: initial?.title,
         }),
-        textInput('date_time', 'Datum och tid', {
+        textInputLabel('date_time', 'Datum och tid', {
           placeholder: 'ÅÅÅÅ-MM-DD TT:mm',
           maxLength: 16,
           value: local?.toFormat('yyyy-MM-dd HH:mm'),
         }),
-        textInput('duration', 'Längd i minuter', {
+        textInputLabel('duration', 'Längd i minuter', {
           placeholder: '60',
           maxLength: 3,
           value: initial ? String(initial.duration_minutes) : undefined,
         }),
-        textInput('ride_type', 'Typ av pass', {
-          placeholder: 'socialt, intervaller, distans, tävling eller utomhus',
-          maxLength: 20,
-          value: initial?.ride_type,
-        }),
-        textInput('details', 'Övriga passuppgifter', {
+        stringSelectLabel(
+          'ride_type',
+          'Typ av pass',
+          RIDE_TYPE_SELECT_OPTIONS.map((option) => ({
+            ...option,
+            default: option.value === initial?.ride_type,
+          })),
+        ),
+        textInputLabel('details', 'Övriga passuppgifter', {
           placeholder:
             'Beskrivning: ...\nRutt/värld: ...\nTempo/träning: ...\nZwift: ...\nAnteckningar: ...',
           required: false,
@@ -195,18 +170,21 @@ function templateModal(
       custom_id: customId,
       title: modalTitle,
       components: [
-        textInput('name', 'Mallnamn', { maxLength: 100, value: initial?.name }),
-        textInput('title', 'Passtitel', { maxLength: 100, value: initial?.title }),
-        textInput('duration', 'Längd i minuter', {
+        textInputLabel('name', 'Mallnamn', { maxLength: 100, value: initial?.name }),
+        textInputLabel('title', 'Passtitel', { maxLength: 100, value: initial?.title }),
+        textInputLabel('duration', 'Längd i minuter', {
           maxLength: 3,
           value: initial ? String(initial.duration_minutes) : undefined,
         }),
-        textInput('ride_type', 'Typ av pass', {
-          placeholder: 'socialt, intervaller, distans, tävling eller utomhus',
-          maxLength: 20,
-          value: initial?.ride_type,
-        }),
-        textInput('details', 'Mallens passuppgifter', {
+        stringSelectLabel(
+          'ride_type',
+          'Typ av pass',
+          RIDE_TYPE_SELECT_OPTIONS.map((option) => ({
+            ...option,
+            default: option.value === initial?.ride_type,
+          })),
+        ),
+        textInputLabel('details', 'Mallens passuppgifter', {
           placeholder: 'Beskrivning: ...\nRutt/värld: ...\nTempo/träning: ...\nAnteckningar: ...',
           required: false,
           style: 2,
@@ -217,68 +195,6 @@ function templateModal(
     },
     9,
   );
-}
-
-function templateRideModal(templateId: string, title: string): Record<string, unknown> {
-  return response(
-    {
-      custom_id: `template_create_ride:${templateId}`,
-      title: `Skapa ${title}`.slice(0, 45),
-      components: [
-        textInput('date_time', 'Datum och tid', {
-          placeholder: 'ÅÅÅÅ-MM-DD TT:mm',
-          maxLength: 16,
-        }),
-        textInput('zwift_url', 'Zwift-länk (valfri)', {
-          required: false,
-          maxLength: 500,
-        }),
-      ],
-    },
-    9,
-  );
-}
-
-function modalValues(interaction: DiscordInteraction): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const row of interaction.data?.components ?? []) {
-    const components = row.components ?? (row.component ? [row.component] : []);
-    for (const component of components) {
-      if (component.custom_id && typeof component.value === 'string') {
-        result[component.custom_id] = component.value;
-      }
-    }
-  }
-  return result;
-}
-
-function scheduledEventDescription(ride: {
-  description?: string | null;
-  route_world?: string | null;
-  pace_workout?: string | null;
-  zwift_url?: string | null;
-  notes?: string | null;
-}): string | undefined {
-  return detailsValue(ride)?.slice(0, 1000);
-}
-
-async function publishRide(ride: Awaited<ReturnType<typeof createRide>>): Promise<void> {
-  const counts = await participantCounts(ride.id);
-  const messageId = await sendChannelMessage(
-    ride.discord_channel_id,
-    rideMessage(ride, counts, config.TIMEZONE),
-  );
-  if (messageId) await setDiscordMessageId(ride.id, messageId);
-
-  const endsAt = new Date(new Date(ride.starts_at).getTime() + ride.duration_minutes * 60_000);
-  const eventId = await createScheduledEvent({
-    name: ride.title,
-    description: scheduledEventDescription(ride),
-    startsAt: new Date(ride.starts_at),
-    endsAt,
-    location: scheduledEventLocation(ride.zwift_url ?? undefined, ride.ride_type),
-  });
-  await setDiscordEventId(ride.id, eventId);
 }
 
 function updateInteractionLater(
@@ -302,50 +218,6 @@ function updateInteractionLater(
         }
       });
   });
-}
-
-async function handleCreateRide(
-  interaction: DiscordInteraction,
-  user: DiscordUser,
-  channelId: string,
-  fields: Record<string, string>,
-): Promise<Record<string, unknown>> {
-  try {
-    const {
-      title,
-      startsAt,
-      durationMinutes,
-      rideType,
-      zwiftUrl,
-      description,
-      routeWorld,
-      paceWorkout,
-      notes,
-    } = parseCreateRideFields(fields, config.TIMEZONE);
-
-    const ride = await createRide({
-      title,
-      description,
-      rideType,
-      startsAt,
-      durationMinutes,
-      zwiftUrl,
-      creatorDiscordId: user.id,
-      channelId,
-      routeWorld,
-      paceWorkout,
-      notes,
-    });
-    await setParticipant(ride.id, user.id, 'going');
-    updateInteractionLater(interaction, async () => {
-      await publishRide(ride);
-      return `Passet **${ride.title}** (#${ride.id}) har skapats och publicerats.`;
-    });
-    return ephemeral(`Passet **${ride.title}** (#${ride.id}) har sparats och publiceras …`);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Kunde inte skapa passet.';
-    return ephemeral(message);
-  }
 }
 
 async function handleListRides(): Promise<Record<string, unknown>> {
@@ -393,7 +265,7 @@ async function openEditRideModal(sub: DiscordOption): Promise<Record<string, unk
   const id = optionId(sub);
   if (!id) return ephemeral('Ett giltigt pass-ID måste anges.');
   const ride = await getRide(id);
-  if (!ride || ride.status !== 'scheduled' || new Date(ride.starts_at).getTime() <= Date.now()) {
+  if (ride?.status !== 'scheduled' || new Date(ride.starts_at).getTime() <= Date.now()) {
     return ephemeral('Passet finns inte eller kan inte längre redigeras.');
   }
   return rideModal(`ride_edit:${id}`, 'Redigera CK UNI-pass', ride);
@@ -413,13 +285,7 @@ async function syncEditedRide(ride: NonNullable<Awaited<ReturnType<typeof update
     messageUpdated = true;
   }
 
-  const eventInput = {
-    name: ride.title,
-    description: scheduledEventDescription(ride),
-    startsAt: new Date(ride.starts_at),
-    endsAt: new Date(new Date(ride.starts_at).getTime() + ride.duration_minutes * 60_000),
-    location: scheduledEventLocation(ride.zwift_url ?? undefined, ride.ride_type),
-  };
+  const eventInput = scheduledEventInput(ride);
   if (ride.discord_event_id) {
     await updateScheduledEvent(ride.discord_event_id, eventInput);
   } else {
@@ -463,14 +329,6 @@ async function handleTemplateList(): Promise<Record<string, unknown>> {
   return ephemeral(`### Passmallar\n${lines.join('\n')}`);
 }
 
-async function openTemplateRideModal(sub: DiscordOption): Promise<Record<string, unknown>> {
-  const id = optionId(sub);
-  if (!id) return ephemeral('Ett giltigt mall-ID måste anges.');
-  const template = await getRideTemplate(id);
-  if (!template?.active) return ephemeral('Mallen finns inte eller är inaktiverad.');
-  return templateRideModal(id, template.name);
-}
-
 async function openTemplateEditModal(sub: DiscordOption): Promise<Record<string, unknown>> {
   const id = optionId(sub);
   if (!id) return ephemeral('Ett giltigt mall-ID måste anges.');
@@ -509,50 +367,6 @@ async function handleTemplateSubmit(
   }
 }
 
-async function handleTemplateRideSubmit(
-  interaction: DiscordInteraction,
-  templateId: string,
-  user: DiscordUser,
-  channelId: string,
-  fields: Record<string, string>,
-): Promise<Record<string, unknown>> {
-  try {
-    const template = await getRideTemplate(templateId);
-    if (!template?.active) return ephemeral('Mallen finns inte eller är inaktiverad.');
-    const { startsAt, zwiftUrl } = parseTemplateRideFields(fields, config.TIMEZONE);
-    const ride = await createRide({
-      title: template.title,
-      description: template.description ?? undefined,
-      rideType: template.ride_type,
-      startsAt,
-      durationMinutes: template.duration_minutes,
-      zwiftUrl,
-      creatorDiscordId: user.id,
-      channelId,
-      routeWorld: template.route_world ?? undefined,
-      paceWorkout: template.pace_workout ?? undefined,
-      notes: template.notes ?? undefined,
-      templateId: template.id,
-    });
-    await setParticipant(ride.id, user.id, 'going');
-    updateInteractionLater(interaction, async () => {
-      await publishRide(ride);
-      return `Passet **${ride.title}** (#${ride.id}) har skapats och publicerats från mallen.`;
-    });
-    return ephemeral(
-      `Passet **${ride.title}** (#${ride.id}) har sparats och publiceras från mallen …`,
-    );
-  } catch (error) {
-    const databaseError = error as { code?: string };
-    if (databaseError.code === '23505') {
-      return ephemeral('Ett pass från den här mallen finns redan på den valda starttiden.');
-    }
-    return ephemeral(
-      error instanceof Error ? error.message : 'Kunde inte skapa passet från mallen.',
-    );
-  }
-}
-
 async function handleRide(interaction: DiscordInteraction): Promise<Record<string, unknown>> {
   const user = getUser(interaction);
   if (!user || !interaction.channel_id)
@@ -568,7 +382,7 @@ async function handleRide(interaction: DiscordInteraction): Promise<Record<strin
     ) {
       return ephemeral('🚫 Endast ledare och administratörer kan skapa pass.');
     }
-    return rideModal();
+    return openRideCreateBuilder();
   }
   if (sub.name === 'list') return handleListRides();
   if (
@@ -581,7 +395,11 @@ async function handleRide(interaction: DiscordInteraction): Promise<Record<strin
   if (sub.name === 'cancel') return handleCancelRide(sub);
   if (sub.name === 'mall-spara') return templateModal('template_save', 'Spara passmall');
   if (sub.name === 'mall-lista') return handleTemplateList();
-  if (sub.name === 'mall-skapa') return openTemplateRideModal(sub);
+  if (sub.name === 'mall-skapa') {
+    const id = optionId(sub);
+    if (!id) return ephemeral('Ett giltigt mall-ID måste anges.');
+    return openTemplateRideDraft(user, interaction.channel_id, id);
+  }
   if (sub.name === 'mall-redigera') return openTemplateEditModal(sub);
   if (sub.name === 'mall-inaktivera') return handleDisableTemplate(sub);
 
@@ -599,29 +417,21 @@ async function handleModal(interaction: DiscordInteraction): Promise<Record<stri
   }
   await upsertUser(user.id, displayName(user));
   const customId = interaction.data?.custom_id;
+  const createResponse = await handleRideCreateModal(interaction);
+  if (createResponse) return createResponse;
   const fields = modalValues(interaction);
-  if (customId === 'ride_create') {
-    return handleCreateRide(interaction, user, interaction.channel_id, fields);
-  }
   if (customId?.startsWith('ride_edit:')) {
     return handleEditRideSubmit(interaction, customId.split(':')[1], fields);
   }
   if (customId === 'template_save' || customId?.startsWith('template_edit:')) {
     return handleTemplateSubmit(customId, user, fields);
   }
-  if (customId?.startsWith('template_create_ride:')) {
-    return handleTemplateRideSubmit(
-      interaction,
-      customId.split(':')[1],
-      user,
-      interaction.channel_id,
-      fields,
-    );
-  }
   return ephemeral('Okänt formulär.');
 }
 
 async function handleButton(interaction: DiscordInteraction): Promise<Record<string, unknown>> {
+  const createResponse = await handleRideCreateComponent(interaction);
+  if (createResponse) return createResponse;
   const user = getUser(interaction);
   const customId = interaction.data?.custom_id;
   if (!user || !customId) return ephemeral('Ogiltig knapptryckning.');

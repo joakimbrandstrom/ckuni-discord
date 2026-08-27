@@ -53,11 +53,13 @@ Commands:
 - `/ride cancel`
 - `/ride mall-spara`
 - `/ride mall-lista`
-- `/ride mall-skapa`
 - `/ride mall-redigera`
 - `/ride mall-inaktivera`
 - `/strava connect`
 - `/leaderboard`
+
+`/ride mall-skapa` remains registered temporarily for backwards compatibility. The normal flow is
+to choose a template by name through `/ride create`.
 
 ## Suggested CK UNI server permissions
 
@@ -95,8 +97,25 @@ Create these channels manually in Discord; the bot does not bootstrap or manage 
 ### `#zwift-rides`: official CK UNI Zwift rides
 
 This is the publication channel for structured rides that a `Ledare` has already created as a
-Zwift Club Event. The leader manually copies its URL and details into `/ride create`. The bot never
-creates a Zwift event and does not scrape Zwift.
+Zwift Club Event. The bot never creates a Zwift event and does not scrape Zwift.
+
+The normal leader flow is:
+
+1. Create the CK UNI Club Event in Zwift Companion and copy its URL.
+2. Run `/ride create` in `#zwift-rides`.
+3. Select an active template by name, choose `Kopiera senaste passet`, or choose `Skapa nytt pass`.
+4. Enter the changing information. Dates use `ÅÅÅÅ-MM-DD`, times use `TT:mm` in `TIMEZONE`, normally
+   `Europe/Stockholm`.
+5. For a new ride, choose `Lägg till detaljer` to enter the Zwift URL, description, route/world,
+   pace/workout, and notes in separate fields. No special prefixes or free-text syntax are needed.
+6. Review the ephemeral preview and its destination channel.
+7. Select `Publicera`. Until this confirmation there is no public card, Scheduled Event, or ride
+   record.
+
+Drafts are private to their creator, stored in PostgreSQL, and expire after 24 hours. If Discord
+only completes part of publication, the preview offers a retry that reuses the saved message and
+event IDs. `/ride mall-skapa id:<nummer>` remains registered temporarily for backwards
+compatibility, but leaders should normally select templates by name through `/ride create`.
 
 Recommended overrides:
 

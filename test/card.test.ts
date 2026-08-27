@@ -20,6 +20,7 @@ function ride(overrides: Partial<Ride> = {}): Ride {
     pace_workout: null,
     notes: null,
     template_id: null,
+    creation_draft_id: null,
     status: 'scheduled',
     ...overrides,
   };
@@ -66,4 +67,11 @@ test('marks cancelled rides clearly and disables participation buttons', () => {
   assert.match(message.embeds[0].title, /INSTÄLLT/);
   assert.match(message.embeds[0].description, /passet är inställt/);
   assert.ok(message.components[0].components.every((component) => component.disabled));
+});
+
+test('rejects ride details that exceed Discord embed limits', () => {
+  assert.throws(
+    () => rideMessage(ride({ description: 'x'.repeat(4096) }), { going: 1, maybe: 0 }, 'UTC'),
+    /för långa/,
+  );
 });

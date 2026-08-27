@@ -33,6 +33,10 @@ let app: FastifyInstance;
 let db: typeof import('../../src/db/pool.js');
 const originalFetch = globalThis.fetch;
 const discordCalls: Array<{ url: string; method?: string; body?: string }> = [];
+let messageSequence = 0;
+let eventSequence = 0;
+let loseNextEventResponse = false;
+const scheduledEvents: Array<{ id: string; description?: string }> = [];
 
 before(async () => {
   if (!databaseUrl) return;
@@ -41,14 +45,30 @@ before(async () => {
   globalThis.fetch = async (input, init) => {
     const url = String(input);
     discordCalls.push({ url, method: init?.method, body: String(init?.body ?? '') });
-    const id = url.includes('/channels/') && init?.method === 'POST' ? 'message-1' : 'event-1';
+    if (url.endsWith('/scheduled-events') && init?.method === 'GET') {
+      return new Response(JSON.stringify(scheduledEvents), { status: 200 });
+    }
+    if (url.endsWith('/scheduled-events') && init?.method === 'POST') {
+      const event = {
+        id: `event-${++eventSequence}`,
+        description: (JSON.parse(String(init.body)) as { description?: string }).description,
+      };
+      scheduledEvents.push(event);
+      if (loseNextEventResponse) {
+        loseNextEventResponse = false;
+        throw new TypeError('connection closed after Discord accepted the event');
+      }
+      return new Response(JSON.stringify(event), { status: 200 });
+    }
+    const id =
+      url.includes('/channels/') && init?.method === 'POST' ? `message-${++messageSequence}` : 'ok';
     return new Response(JSON.stringify({ id }), { status: 200 });
   };
   db = await import('../../src/db/pool.js');
   const { migrate } = await import('../../src/db/migrate.js');
   await migrate(db.pool);
   await db.pool.query(
-    'TRUNCATE activities, strava_connections, ride_participants, rides, ride_templates, users RESTART IDENTITY CASCADE',
+    'TRUNCATE activities, strava_connections, ride_participants, ride_drafts, rides, ride_templates, users RESTART IDENTITY CASCADE',
   );
   const { buildApp } = await import('../../src/app.js');
   app = await buildApp();
@@ -110,11 +130,41 @@ function modal(
   payload.data = {
     custom_id: customId,
     components: Object.entries(values).map(([custom_id, value]) => ({
-      type: 1,
-      components: [{ type: 4, custom_id, value }],
+      type: 18,
+      component:
+        custom_id === 'ride_type'
+          ? { type: 3, custom_id, values: [value] }
+          : { type: 4, custom_id, value },
     })),
   };
   return payload;
+}
+
+function component(
+  customId: string,
+  userId: string,
+  roles: string[] = [],
+  values?: string[],
+): DiscordInteraction {
+  const payload = interaction('', userId, roles);
+  payload.type = 3;
+  payload.data = { custom_id: customId, component_type: values ? 3 : 2, values };
+  return payload;
+}
+
+function draftIdFrom(payload: Record<string, unknown>): string {
+  const data = payload.data as {
+    custom_id?: string;
+    components?: Array<{ components?: Array<{ custom_id?: string }> }>;
+  };
+  const customId =
+    data.custom_id ??
+    data.components
+      ?.flatMap((row) => row.components ?? [])
+      .find((item) => item.custom_id?.startsWith('ride_draft_'))?.custom_id;
+  const draftId = customId?.split(':')[1];
+  assert.ok(draftId);
+  return draftId;
 }
 
 integration(
@@ -129,33 +179,121 @@ integration(
     const opened = await send(
       interaction('ride', 'leader', ['ride-leader'], { options: subcommand('create') }),
     );
-    assert.equal(opened.json().type, 9);
-    assert.equal(opened.json().data.custom_id, 'ride_create');
+    assert.equal(opened.json().type, 4);
+    assert.equal(opened.json().data.flags, 64);
+    assert.match(JSON.stringify(opened.json().data.components), /Kopiera senaste passet/);
+    assert.match(JSON.stringify(opened.json().data.components), /Skapa nytt pass/);
+
+    const noPrevious = await send(component('ride_create_copy', 'new-leader', ['ride-leader']));
+    assert.match(noPrevious.json().data.content, /inget tidigare officiellt pass/);
+
+    const newModal = await send(component('ride_create_new', 'leader', ['ride-leader']));
+    assert.equal(newModal.json().type, 9);
+    assert.match(newModal.json().data.custom_id, /^ride_draft_basic:/);
+    assert.ok(newModal.json().data.components.every((item: { type: number }) => item.type === 18));
+    const draftId = draftIdFrom(newModal.json());
 
     const pastCreate = await send(
-      modal('ride_create', 'leader', ['ride-leader'], {
+      modal(`ride_draft_basic:${draftId}`, 'leader', ['ride-leader'], {
         title: 'För sent pass',
-        date_time: DateTime.utc().minus({ hours: 1 }).toFormat('yyyy-MM-dd HH:mm'),
+        date: DateTime.utc().minus({ hours: 1 }).toFormat('yyyy-MM-dd'),
+        time: DateTime.utc().minus({ hours: 1 }).toFormat('HH:mm'),
         duration: '60',
-        ride_type: 'socialt',
+        ride_type: 'social',
       }),
     );
     assert.match(pastCreate.json().data.content, /framtiden/);
 
-    const created = await send(
-      modal('ride_create', 'leader', ['ride-leader'], {
+    const preview = await send(
+      modal(`ride_draft_basic:${draftId}`, 'leader', ['ride-leader'], {
         title: 'Integrationspass',
-        date_time: future.toFormat('yyyy-MM-dd HH:mm'),
+        date: future.toFormat('yyyy-MM-dd'),
+        time: future.toFormat('HH:mm'),
         duration: '60',
-        ride_type: 'socialt',
-        details: 'Beskrivning: Lugnt pass\nRutt/värld: Watopia\nZwift: https://zwift.test/1',
+        ride_type: 'social',
       }),
     );
-    assert.equal(created.statusCode, 200);
-    const rideId = /#(\d+)/.exec(created.json().data.content)?.[1];
-    assert.ok(rideId);
+    assert.match(preview.json().data.content, /Förhandsvisning/);
+    assert.match(preview.json().data.content, /<#channel>/);
+    assert.match(JSON.stringify(preview.json().data.components), /Publicera/);
+    assert.equal(
+      (await db.pool.query('SELECT COUNT(*)::int AS count FROM rides')).rows[0].count,
+      0,
+    );
+
+    const detailsModal = await send(
+      component(`ride_draft_edit_details:${draftId}`, 'leader', ['ride-leader']),
+    );
+    assert.equal(detailsModal.json().type, 9);
+    assert.ok(
+      detailsModal.json().data.components.every((item: { type: number }) => item.type === 18),
+    );
+    const detailedPreview = await send(
+      modal(`ride_draft_details:${draftId}`, 'leader', ['ride-leader'], {
+        zwift_url: 'https://zwift.test/1',
+        description: 'Lugnt pass',
+        route_world: 'Watopia',
+        pace_workout: '2,5 W/kg',
+        notes: 'Samling i röstkanalen',
+      }),
+    );
+    assert.match(detailedPreview.json().data.embeds[0].description, /Lugnt pass/);
+
+    const editBasic = await send(
+      component(`ride_draft_edit_basic:${draftId}`, 'leader', ['ride-leader']),
+    );
+    assert.equal(editBasic.json().type, 9);
+    const editedPreview = await send(
+      modal(`ride_draft_basic:${draftId}`, 'leader', ['ride-leader'], {
+        title: 'Uppdaterat integrationspass',
+        date: future.toFormat('yyyy-MM-dd'),
+        time: future.toFormat('HH:mm'),
+        duration: '75',
+        ride_type: 'endurance',
+      }),
+    );
+    assert.match(editedPreview.json().data.embeds[0].title, /Uppdaterat integrationspass/);
+
+    const foreignPublish = await send(
+      component(`ride_draft_publish:${draftId}`, 'other-leader', ['ride-leader']),
+    );
+    assert.match(foreignPublish.json().data.content, /annan användare/);
+
+    const firstPublish = await send(
+      component(`ride_draft_publish:${draftId}`, 'leader', ['ride-leader']),
+    );
+    const retryPublish = await send(
+      component(`ride_draft_publish:${draftId}`, 'leader', ['ride-leader']),
+    );
+    assert.match(firstPublish.json().data.content, /Publicerar/);
+    assert.match(retryPublish.json().data.content, /Publicerar/);
     await waitForDiscordBackgroundTasks();
     assert.ok(discordCalls.some((call) => call.url.endsWith('/messages/@original')));
+    const stored = await db.pool.query('SELECT * FROM rides WHERE creation_draft_id=$1', [draftId]);
+    assert.equal(stored.rowCount, 1);
+    const rideId = String(stored.rows[0].id);
+    assert.equal(
+      discordCalls.filter(
+        (call) => call.url.endsWith('/channels/channel/messages') && call.method === 'POST',
+      ).length,
+      1,
+    );
+    const publishedMessage = discordCalls.find(
+      (call) => call.url.endsWith('/channels/channel/messages') && call.method === 'POST',
+    );
+    assert.equal(
+      (JSON.parse(publishedMessage?.body ?? '{}') as { enforce_nonce?: boolean }).enforce_nonce,
+      true,
+    );
+    assert.equal(
+      discordCalls.filter(
+        (call) => call.url.includes('/scheduled-events') && call.method === 'POST',
+      ).length,
+      1,
+    );
+    assert.ok(
+      scheduledEvents.some((event) => event.description?.includes(`CK UNI Pass-ID: ${rideId}`)),
+    );
 
     const editOpened = await send(
       interaction('ride', 'other-leader', ['ride-leader'], {
@@ -268,31 +406,149 @@ integration(
     );
     const templateId = /#(\d+)/.exec(savedTemplate.json().data.content)?.[1];
     assert.ok(templateId);
+    await db.pool.query(
+      `INSERT INTO ride_templates(name, title, ride_type, duration_minutes, creator_discord_id)
+       SELECT 'ZZ Mall ' || LPAD(value::text, 2, '0'), 'Pass ' || value, 'social', 60, 'leader'
+       FROM generate_series(0, 25) AS value`,
+    );
+
+    const builderWithTemplate = await send(
+      interaction('ride', 'leader', ['ride-leader'], { options: subcommand('create') }),
+    );
+    const builderJson = JSON.stringify(builderWithTemplate.json().data.components);
+    assert.match(builderJson, /Tisdagsmall/);
+    assert.match(builderJson, /Fler mallar/);
+    assert.doesNotMatch(builderJson, /Mall-ID|#\d+/);
+    const nextTemplatePage = await send(
+      component('ride_create_templates:1', 'leader', ['ride-leader']),
+    );
+    assert.equal(nextTemplatePage.json().type, 7);
+    assert.match(JSON.stringify(nextTemplatePage.json().data.components), /ZZ Mall 25/);
 
     const createFromTemplate = await send(
+      component('ride_create_template', 'leader', ['ride-leader'], [templateId]),
+    );
+    assert.equal(createFromTemplate.json().type, 9);
+    const templateDraftId = draftIdFrom(createFromTemplate.json());
+    const templateStart = future.plus({ days: 1 });
+    const generatedPreview = await send(
+      modal(`ride_draft_schedule:${templateDraftId}`, 'leader', ['ride-leader'], {
+        date: templateStart.toFormat('yyyy-MM-dd'),
+        time: templateStart.toFormat('HH:mm'),
+        zwift_url: 'https://zwift.test/template',
+        extra_comment: 'Ta med vatten',
+      }),
+    );
+    assert.match(generatedPreview.json().data.content, /Förhandsvisning/);
+    assert.equal(
+      (
+        await db.pool.query('SELECT COUNT(*)::int AS count FROM rides WHERE creation_draft_id=$1', [
+          templateDraftId,
+        ])
+      ).rows[0].count,
+      0,
+    );
+    await send(component(`ride_draft_publish:${templateDraftId}`, 'leader', ['ride-leader']));
+    await waitForDiscordBackgroundTasks();
+    const generatedRideId = String(
+      (await db.pool.query('SELECT id FROM rides WHERE creation_draft_id=$1', [templateDraftId]))
+        .rows[0].id,
+    );
+
+    const legacyTemplate = await send(
       interaction('ride', 'leader', ['ride-leader'], {
         options: subcommand('mall-skapa', Number(templateId)),
       }),
     );
-    assert.equal(createFromTemplate.json().type, 9);
-    const templateStart = future.plus({ days: 1 }).toFormat('yyyy-MM-dd HH:mm');
-    const generated = await send(
-      modal(`template_create_ride:${templateId}`, 'leader', ['ride-leader'], {
-        date_time: templateStart,
-        zwift_url: 'https://zwift.test/template',
+    assert.equal(legacyTemplate.json().type, 9);
+    assert.match(legacyTemplate.json().data.custom_id, /^ride_draft_schedule:/);
+
+    const copied = await send(component('ride_create_copy', 'leader', ['ride-leader']));
+    assert.equal(copied.json().type, 9);
+    const copiedDraftId = draftIdFrom(copied.json());
+    const copiedStored = await db.pool.query('SELECT * FROM ride_drafts WHERE id=$1', [
+      copiedDraftId,
+    ]);
+    assert.equal(copiedStored.rows[0].starts_at, null);
+    assert.equal(copiedStored.rows[0].zwift_url, null);
+    assert.equal(copiedStored.rows[0].published_ride_id, null);
+    const cancelledDraft = await send(
+      component(`ride_draft_cancel:${copiedDraftId}`, 'leader', ['ride-leader']),
+    );
+    assert.match(cancelledDraft.json().data.content, /avbrutits/);
+    const cancelledPublish = await send(
+      component(`ride_draft_publish:${copiedDraftId}`, 'leader', ['ride-leader']),
+    );
+    assert.match(cancelledPublish.json().data.content, /avbrutits/);
+    assert.equal(
+      (
+        await db.pool.query('SELECT COUNT(*)::int AS count FROM rides WHERE creation_draft_id=$1', [
+          copiedDraftId,
+        ])
+      ).rows[0].count,
+      0,
+    );
+
+    const expiredModal = await send(component('ride_create_new', 'leader', ['ride-leader']));
+    const expiredDraftId = draftIdFrom(expiredModal.json());
+    await db.pool.query(
+      "UPDATE ride_drafts SET expires_at=NOW() - INTERVAL '1 minute' WHERE id=$1",
+      [expiredDraftId],
+    );
+    const expired = await send(
+      component(`ride_draft_edit_basic:${expiredDraftId}`, 'leader', ['ride-leader']),
+    );
+    assert.match(expired.json().data.content, /gått ut/);
+    const expiredPublish = await send(
+      component(`ride_draft_publish:${expiredDraftId}`, 'leader', ['ride-leader']),
+    );
+    assert.match(expiredPublish.json().data.content, /gått ut/);
+
+    const partialModal = await send(component('ride_create_new', 'leader', ['ride-leader']));
+    const partialDraftId = draftIdFrom(partialModal.json());
+    await send(
+      modal(`ride_draft_basic:${partialDraftId}`, 'leader', ['ride-leader'], {
+        title: 'Partiell publicering',
+        date: future.plus({ days: 2 }).toFormat('yyyy-MM-dd'),
+        time: future.toFormat('HH:mm'),
+        duration: '60',
+        ride_type: 'social',
       }),
     );
-    assert.match(generated.json().data.content, /har sparats och publiceras från mallen/);
-    const duplicate = await send(
-      modal(`template_create_ride:${templateId}`, 'leader', ['ride-leader'], {
-        date_time: templateStart,
-        zwift_url: 'https://zwift.test/template',
-      }),
-    );
-    assert.match(duplicate.json().data.content, /finns redan/);
+    const callsBeforePartial = discordCalls.length;
+    loseNextEventResponse = true;
+    await send(component(`ride_draft_publish:${partialDraftId}`, 'leader', ['ride-leader']));
     await waitForDiscordBackgroundTasks();
-    const generatedRideId = /#(\d+)/.exec(generated.json().data.content)?.[1];
-    assert.ok(generatedRideId);
+    const partialAfterFailure = await db.pool.query(
+      `SELECT d.status, r.discord_message_id, r.discord_event_id
+       FROM ride_drafts d JOIN rides r ON r.id=d.published_ride_id WHERE d.id=$1`,
+      [partialDraftId],
+    );
+    assert.deepEqual(partialAfterFailure.rows[0], {
+      status: 'publishing',
+      discord_message_id: 'message-3',
+      discord_event_id: null,
+    });
+    await send(component(`ride_draft_publish:${partialDraftId}`, 'leader', ['ride-leader']));
+    await waitForDiscordBackgroundTasks();
+    const partialCalls = discordCalls.slice(callsBeforePartial);
+    assert.equal(
+      partialCalls.filter((call) => call.url.includes('/channels/') && call.method === 'POST')
+        .length,
+      1,
+    );
+    assert.equal(
+      partialCalls.filter(
+        (call) => call.url.includes('/scheduled-events') && call.method === 'POST',
+      ).length,
+      1,
+    );
+    assert.equal(
+      (await db.pool.query('SELECT status FROM ride_drafts WHERE id=$1', [partialDraftId])).rows[0]
+        .status,
+      'published',
+    );
+
     const adminCancel = await send(
       interaction('ride', 'admin-user', ['admin'], {
         options: subcommand('cancel', Number(generatedRideId)),

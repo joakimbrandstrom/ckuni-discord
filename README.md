@@ -158,9 +158,19 @@ See [`docs/CLOUDFLARE_TUNNEL.md`](docs/CLOUDFLARE_TUNNEL.md) for the exact Cloud
 /ride edit id:12
 ```
 
-The bot opens a Swedish form for the ride details. After submission it posts a ride card with
-`Jag kommer` and `Kanske` buttons and creates a Discord Scheduled Event. Ride Leaders and
-administrators can edit upcoming rides; the existing card and Scheduled Event are updated.
+Create the real event in Zwift Companion first, then run `/ride create` in Discord. The bot shows
+an ephemeral builder where a Ride Leader or administrator can choose an active template by name,
+copy their latest official ride, or create a new ride. Date and time are separate fields, and ride
+type is selected from a list rather than entered as free text.
+
+Each form step is saved as a PostgreSQL draft and followed by a preview. Nothing public is created
+until the leader selects `Publicera`. The confirmation creates the ride, adds the leader as going,
+posts the card with `Jag kommer` and `Kanske`, and creates the Discord Scheduled Event. A partial
+Discord failure can be retried without reposting completed steps. Zwift remains the source of truth;
+the bot does not create or scrape Zwift events.
+
+Ride Leaders and administrators can edit upcoming rides with `/ride edit`; the existing card and
+Scheduled Event are updated.
 
 ### List upcoming rides
 
@@ -182,13 +192,13 @@ as cancelled, disables its participation buttons and cancels the Discord Schedul
 ```text
 /ride mall-spara
 /ride mall-lista
-/ride mall-skapa id:3
 /ride mall-redigera id:3
 /ride mall-inaktivera id:3
 ```
 
-Templates keep the reusable title, duration, ride type and optional ride details. Creating a ride
-from a template asks only for its start time and optional Zwift link.
+Templates keep the reusable title, duration, ride type and optional ride details. Use `/ride create`
+and select the template by name to create a ride from it. The older `/ride mall-skapa id:3` command
+is temporarily available for backwards compatibility and opens the same draft and preview flow.
 
 ### Connect Strava
 
@@ -211,6 +221,7 @@ V0.1 awards 10 points per confirmed CK UNI ride. The intent is participation, no
 - `users`
 - `rides`
 - `ride_templates`
+- `ride_drafts`
 - `ride_participants`
 - `strava_connections`
 - `activities`

@@ -60,6 +60,16 @@ export async function createScheduledEvent(input: {
   return event.id;
 }
 
+export async function findScheduledEventByDescriptionMarker(
+  marker: string,
+): Promise<string | null> {
+  const response = await discordFetch(`/guilds/${config.DISCORD_GUILD_ID}/scheduled-events`, {
+    method: 'GET',
+  });
+  const events = (await response.json()) as Array<{ id: string; description?: string | null }>;
+  return events.find((event) => event.description?.includes(marker))?.id ?? null;
+}
+
 export async function cancelScheduledEvent(eventId: string): Promise<void> {
   await discordFetch(`/guilds/${config.DISCORD_GUILD_ID}/scheduled-events/${eventId}`, {
     method: 'DELETE',
@@ -91,10 +101,13 @@ export async function updateScheduledEvent(
 export async function sendChannelMessage(
   channelId: string,
   payload: unknown,
+  nonce?: string,
 ): Promise<string | null> {
   const response = await discordFetch(`/channels/${channelId}/messages`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(
+      nonce ? { ...(payload as Record<string, unknown>), nonce, enforce_nonce: true } : payload,
+    ),
   });
   const message = (await response.json()) as { id?: string };
   return message.id ?? null;
