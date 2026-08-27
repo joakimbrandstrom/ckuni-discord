@@ -1,7 +1,7 @@
 # Checklista för v0.2-piloten
 
 Använd checklistan med en `Ledare`, ett separat medlemskonto och vid behov ett gästkonto. Kör
-piloten i de befintliga kanalerna `#zwift-ride` och `#allmänt` efter att kanal-ID:n, behörigheter och
+piloten i kanalerna `#zwift-ride` och `#spontan-rides` efter att kanal-ID:n, behörigheter och
 roller har konfigurerats enligt [Discord-guiden](DISCORD_SETUP.md).
 
 ## Före testet
@@ -40,8 +40,8 @@ roller har konfigurerats enligt [Discord-guiden](DISCORD_SETUP.md).
        deltagarvalen finns kvar och att inga dubbletter publiceras.
 15. [ ] Skapa ett testpass ungefär 35 minuter framåt. Låt boten köra och kontrollera att den svenska
          30-minuterspåminnelsen skickas en gång, även om boten startas om efter att den skickats.
-16. [ ] Skriv ett vanligt meddelande om ett spontanpass i `#allmänt`, gärna med en Zwift- eller
-         Meetup-länk.
+16. [ ] Skriv ett vanligt meddelande om ett spontanpass i `#spontan-rides`, gärna med en Zwift- eller
+          Meetup-länk.
 17. [ ] Kontrollera att en annan medlem kan svara och reagera utan att boten skapar passkort,
          Scheduled Event eller påminnelser för förslaget.
 

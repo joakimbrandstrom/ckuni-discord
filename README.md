@@ -265,8 +265,8 @@ GitHub Issues are the source of truth for the project roadmap.
 3. **[v0.3 Strava & Attendance](https://github.com/joakimbrandstrom/ckuni-discord/issues/22)** — harden opt-in Strava integration, privacy controls, manual attendance and activity matching.
 4. **[v0.4 Winter Cup & Community](https://github.com/joakimbrandstrom/ckuni-discord/issues/23)** — seasons, participation scoring, weekly recaps, achievements and Discord interest roles.
 
-Spontaneous ride suggestions use normal messages and reactions in `#allmänt`; the bot does not
-create cards, events or reminders for them. Future backlog includes
+Spontaneous ride suggestions use normal messages and reactions in `#spontan-rides`; the bot does
+not create cards, events or reminders for them. Future backlog includes
 [outdoor club rides](https://github.com/joakimbrandstrom/ckuni-discord/issues/19).
 
 Before inviting riders, complete the [v0.2 pilot checklist](docs/PILOT_CHECKLIST.md).

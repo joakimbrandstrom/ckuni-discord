@@ -116,6 +116,7 @@ The bot uses the server's existing channels and does not bootstrap or manage the
 
 🚴 Cykling
   #zwift-ride
+  #spontan-rides
 
 🔒 Ledare
   #snack
@@ -163,11 +164,27 @@ Suggested channel topic:
 
 > Officiella CK UNI-pass på Zwift. Ledare publicerar pass; välj Jag kommer eller Kanske på passkortet.
 
-### `#allmänt`: community and informal coordination
+### `#spontan-rides`: informal ride coordination
 
-This channel is normal Discord chat for discussions, questions and spontaneous ride suggestions.
-Members may paste a Zwift event or Meetup link when they have one, but no link or special format is
-required. The bot does not create cards, Scheduled Events or reminders for spontaneous suggestions.
+This channel is normal Discord chat for spontaneous ride suggestions. Members may paste a Zwift
+event or Meetup link when they have one, but no link or special format is required. The bot does not
+create cards, Scheduled Events or reminders for spontaneous suggestions.
+
+Recommended overrides:
+
+| Role | View channel | Send messages | Add reactions |
+| --- | --- | --- | --- |
+| `CK UNI Rider` | Allow | Allow | Allow |
+| `Gäst` | Allow | Deny | Deny |
+| `Ledare` | Allow | Allow | Allow |
+| `System Admin` | Allow | Allow | Allow |
+
+Suggested channel topic:
+
+> Spontana cykelpass och sällskap. Skriv tid, upplägg och eventuell Zwift- eller Meetup-länk.
+
+Keep `#allmänt` for general club discussion so ride coordination does not displace normal community
+chat.
 
 ### Voice channels
 
