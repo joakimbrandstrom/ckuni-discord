@@ -1,6 +1,13 @@
 # CK UNI Discord
 
-Digital clubhouse for CK UNI cycling: Discord community, Zwift group rides and optional Strava activity matching.
+Digital clubhouse for CK UNI cycling: Discord community, official ride signups and reminders,
+with CK UNI-owned attendance and leaderboard data. Zwift hosts the actual events.
+
+CK UNI Discord does not integrate with Strava or require members to link external fitness accounts.
+There is no unofficial Zwift API or scraping dependency. This release removes the integration and
+includes the database retirement migration. Existing installations must follow the
+[retirement upgrade notes](docs/LOCAL_DEPLOYMENT.md#strava-retirement-upgrade); production deployment
+and provider-side cleanup remain operator actions.
 
 ## What v0.2 includes
 
@@ -16,15 +23,12 @@ Digital clubhouse for CK UNI cycling: Discord community, Zwift group rides and o
 - Cloudflare Tunnel ingress with no router port-forward
 - Cloudflare Quick Tunnel profile for the first test
 - `/health` and `/ready` endpoints
-- Optional `/strava connect` OAuth flow
-- Strava webhook receiver and basic VirtualRide → CK UNI ride matching
-- Encrypted Strava access/refresh tokens at rest
 - `/leaderboard` based on confirmed CK UNI attendance
 
 ## Architecture
 
 ```text
-Discord interactions / Strava
+Discord interactions
             |
             v
       Cloudflare HTTPS
@@ -41,7 +45,10 @@ CK UNI bot (Fastify/TypeScript) ---> PostgreSQL
             +---> Discord Gateway (optional, outbound-only member events)
 ```
 
-Discord remains the UI. Zwift remains the place where the ride happens. Strava is only used for opt-in activity data. The rest of the home server can remain behind VPN/Tailscale.
+Discord owns community interaction, official ride publication, signups and reminders. CK UNI owns
+attendance decisions and leaderboard data in PostgreSQL. Zwift remains the place where the actual
+event happens; leaders create events there and share their links in Discord. The rest of the home
+server can remain behind VPN/Tailscale.
 
 Commands, buttons and forms continue to use signed HTTP interactions. The optional Gateway client
 only receives member events used by automatic welcome messages.
@@ -146,11 +153,10 @@ After the first test works, create a remotely-managed Cloudflare Tunnel and rout
 http://bot:3000
 ```
 
-Put the tunnel token and hostname in `.env`:
+Put the tunnel token in `.env`:
 
 ```dotenv
 CLOUDFLARE_TUNNEL_TOKEN=eyJ...
-PUBLIC_BASE_URL=https://bot.your-domain.example
 ```
 
 Start:
@@ -214,21 +220,28 @@ Templates keep the reusable title, duration, ride type and optional ride details
 and select the template by name to create a ride from it. The older `/ride mall-skapa id:3` command
 is temporarily available for backwards compatibility and opens the same draft and preview flow.
 
-### Connect Strava
-
-```text
-/strava connect
-```
-
-Strava is optional. See [`docs/STRAVA_SETUP.md`](docs/STRAVA_SETUP.md).
-
 ### Leaderboard
 
 ```text
 /leaderboard
 ```
 
-V0.1 awards 10 points per confirmed CK UNI ride. The intent is participation, not FTP or speed.
+The current leaderboard awards 10 points per stored attendance record
+(`ride_participants.attended_at IS NOT NULL`). The intent is participation, not FTP or speed.
+Existing attendance storage and leaderboard behavior are preserved by the retirement; signup alone
+does not mark attendance. There is no new member or leader attendance UI in this cleanup.
+
+### Planned attendance flow (#12)
+
+[Manual attendance #12](https://github.com/joakimbrandstrom/ckuni-discord/issues/12) will provide
+the post-ride flow for official CK UNI rides:
+
+1. A signed-up member selects `Jag var med` after the ride to report participation.
+2. A leader reviews the reports and confirms or removes members, or adds missing participants.
+3. The leader finalizes attendance, which is the basis for the CK UNI leaderboard and Winter Cup.
+
+This is desired behavior, not a currently available UI. Spontaneous rides in `#spontan-rides` are
+excluded from official attendance, leaderboard scoring and Winter Cup.
 
 ## Data model
 
@@ -237,11 +250,12 @@ V0.1 awards 10 points per confirmed CK UNI ride. The intent is participation, no
 - `ride_templates`
 - `ride_drafts`
 - `ride_participants`
-- `strava_connections`
-- `activities`
 - `schema_migrations`
 
-SQL migrations live in [`migrations/`](migrations/).
+SQL migrations live in [`migrations/`](migrations/). This list describes the retained data model;
+the removal release's new `004_remove_strava.sql` drops the retired activity and connection tables
+while preserving `ride_participants.attended_at`. See the upgrade notes before migrating an
+existing database.
 
 ## Security
 
@@ -250,9 +264,7 @@ SQL migrations live in [`migrations/`](migrations/).
 - Cloudflare Tunnel reaches `bot:3000` through podman's private network.
 - PostgreSQL is not published by Compose.
 - Discord interaction signatures are verified with Ed25519 before commands are processed.
-- Strava tokens are encrypted using AES-256-GCM.
 - `.env` is ignored by Git.
-- Strava is opt-in per athlete.
 
 Read [`SECURITY.md`](SECURITY.md) before putting this on a permanent public hostname.
 
@@ -262,8 +274,8 @@ GitHub Issues are the source of truth for the project roadmap.
 
 1. **[v0.1 Deployment & Discord MVP](https://github.com/joakimbrandstrom/ckuni-discord/issues/20)** — deploy the home-server stack, connect Discord, validate the complete ride flow, harden reminders and add Ride Leader/Admin permissions.
 2. **[v0.2 Pilot & UX](https://github.com/joakimbrandstrom/ckuni-discord/issues/21)** — improve ride creation/editing, add templates and run a real CK UNI pilot with 5–10 riders.
-3. **[v0.3 Strava & Attendance](https://github.com/joakimbrandstrom/ckuni-discord/issues/22)** — harden opt-in Strava integration, privacy controls, manual attendance and activity matching.
-4. **[v0.4 Winter Cup & Community](https://github.com/joakimbrandstrom/ckuni-discord/issues/23)** — seasons, participation scoring, weekly recaps, achievements and Discord interest roles.
+3. **[v0.3 Attendance & Winter Cup](https://github.com/joakimbrandstrom/ckuni-discord/issues/22)** - CK UNI-owned attendance through [#12](https://github.com/joakimbrandstrom/ckuni-discord/issues/12), with [Winter Cup #14](https://github.com/joakimbrandstrom/ckuni-discord/issues/14) moving into this theme for seasons and participation scoring.
+4. **[v0.4 Community](https://github.com/joakimbrandstrom/ckuni-discord/issues/23)** - community follow-on work such as weekly recaps, achievements and Discord interest roles.
 
 Spontaneous ride suggestions use normal messages and reactions in `#spontan-rides`; the bot does
 not create cards, events or reminders for them. Future backlog includes
@@ -271,7 +283,7 @@ not create cards, events or reminders for them. Future backlog includes
 
 Before inviting riders, complete the [v0.2 pilot checklist](docs/PILOT_CHECKLIST.md).
 
-Priorities are encoded in issue titles: `P0` = required for the first deployment, `P1` = pilot/MVP usability, `P2` = Strava/attendance, `P3` = community features, and `P4` = future digital-clubhouse expansion.
+Priorities are encoded in issue titles: `P0` = required for the first deployment, `P1` = pilot/MVP usability, `P2` = attendance/Winter Cup, `P3` = community features, and `P4` = future digital-clubhouse expansion.
 
 ## Development
 
@@ -294,14 +306,13 @@ npm run build
 
 Run `npm run format` to apply Biome formatting and safe lint fixes. Mutation testing is
 available through `npm run mutation`; its HTML report is written to `reports/mutation/`. The
-focused mutation suite covers deterministic ride, authorization, state-signing, and encryption
+focused mutation suite covers deterministic ride and authorization
 logic and runs weekly or on demand in GitHub Actions rather than blocking every pull request.
 
 The test suite uses Node's built-in test runner through `tsx`. HTTP tests use
 `Fastify.inject()`, so they do not open a network port. PostgreSQL integration
 tests run when `TEST_DATABASE_URL` is set; they apply the real migrations before
-testing ride lifecycle, participation, attendance, leaderboard, and Strava
-activity matching behavior:
+testing ride lifecycle, participation, attendance and leaderboard behavior:
 
 ```bash
 TEST_DATABASE_URL=postgres://ckuni:password@localhost:5432/ckuni_test \

@@ -2,7 +2,6 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { config } from './config.js';
 import { pool } from './db/pool.js';
 import { registerDiscordInteractions } from './discord/interactions.js';
-import { registerStravaRoutes } from './strava/routes.js';
 
 export type AppOptions = {
   readinessCheck?: () => Promise<unknown>;
@@ -33,6 +32,5 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   });
 
   await registerDiscordInteractions(app);
-  await registerStravaRoutes(app);
   return app;
 }

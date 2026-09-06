@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
+import { Pool } from 'pg';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const integration = databaseUrl ? test : test.skip;
@@ -9,17 +12,10 @@ process.env.DISCORD_APPLICATION_ID ??= 'application';
 process.env.DISCORD_PUBLIC_KEY ??= '00'.repeat(32);
 process.env.DISCORD_BOT_TOKEN ??= 'token';
 process.env.DISCORD_GUILD_ID ??= 'guild';
-process.env.PUBLIC_BASE_URL = 'https://strava-integration.example.test';
-process.env.STRAVA_CLIENT_ID = 'test-strava-client-id';
-process.env.STRAVA_CLIENT_SECRET = 'test-strava-client-secret';
-process.env.STRAVA_VERIFY_TOKEN = 'test-strava-verify-token';
-process.env.STRAVA_STATE_SECRET = 'test-strava-state-secret';
-process.env.TOKEN_ENCRYPTION_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=';
 
 let db: typeof import('../../src/db/pool.js');
 let rides: typeof import('../../src/rides/repository.js');
 let drafts: typeof import('../../src/rides/drafts.js');
-let strava: typeof import('../../src/strava/service.js');
 
 before(async () => {
   if (!databaseUrl) return;
@@ -28,7 +24,6 @@ before(async () => {
   await migrate(db.pool);
   rides = await import('../../src/rides/repository.js');
   drafts = await import('../../src/rides/drafts.js');
-  strava = await import('../../src/strava/service.js');
 });
 
 after(async () => {
@@ -41,15 +36,92 @@ integration('migrations are repeatable', async () => {
   const result = await db.pool.query('SELECT filename FROM schema_migrations ORDER BY filename');
   assert.deepEqual(
     result.rows.map((row) => row.filename),
-    ['001_init.sql', '002_ride_metadata_and_templates.sql', '003_ride_creation_drafts.sql'],
+    [
+      '001_init.sql',
+      '002_ride_metadata_and_templates.sql',
+      '003_ride_creation_drafts.sql',
+      '004_remove_strava.sql',
+    ],
   );
 });
 
 integration(
+  'seeded upgrade removes Strava tables and preserves attendance on repeat migration',
+  async () => {
+    const { migrate } = await import('../../src/db/migrate.js');
+    const schema = `migration_test_${randomUUID().replaceAll('-', '')}`;
+    await db.pool.query(`CREATE SCHEMA ${schema}`);
+    const database = new Pool({
+      connectionString: databaseUrl,
+      options: `-c search_path=${schema}`,
+    });
+    try {
+      await database.query(`CREATE TABLE schema_migrations (
+      filename TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+      for (const filename of [
+        '001_init.sql',
+        '002_ride_metadata_and_templates.sql',
+        '003_ride_creation_drafts.sql',
+      ]) {
+        await database.query(
+          await readFile(new URL(`../../migrations/${filename}`, import.meta.url), 'utf8'),
+        );
+        await database.query('INSERT INTO schema_migrations(filename) VALUES ($1)', [filename]);
+      }
+      await database.query(`
+      INSERT INTO users(discord_id, display_name) VALUES ('member', 'Member');
+      INSERT INTO rides(id, title, ride_type, starts_at, duration_minutes, creator_discord_id, discord_channel_id)
+        VALUES (1, 'Historical ride', 'social', '2026-01-01T10:00:00Z', 60, 'member', 'channel');
+      INSERT INTO ride_participants(ride_id, discord_id, status, attended_at)
+        VALUES (1, 'member', 'going', '2026-01-01T11:00:00Z');
+      INSERT INTO strava_connections(discord_id, athlete_id, access_token_enc, refresh_token_enc, expires_at)
+        VALUES ('member', 42, 'dummy-access', 'dummy-refresh', 0);
+      INSERT INTO activities(strava_activity_id, discord_id, ride_id, sport_type, start_date)
+        VALUES (99, 'member', 1, 'VirtualRide', '2026-01-01T10:00:00Z');
+    `);
+      const participants = (await database.query('SELECT * FROM ride_participants')).rows;
+      const users = (await database.query('SELECT * FROM users')).rows;
+      const storedRides = (await database.query('SELECT * FROM rides')).rows;
+      for (let run = 0; run < 2; run++) {
+        await migrate(database);
+        assert.deepEqual(
+          (await database.query('SELECT * FROM ride_participants')).rows,
+          participants,
+        );
+        assert.deepEqual((await database.query('SELECT * FROM users')).rows, users);
+        assert.deepEqual((await database.query('SELECT * FROM rides')).rows, storedRides);
+        assert.deepEqual(
+          (
+            await database.query(
+              "SELECT to_regclass('activities') AS activities, to_regclass('strava_connections') AS connections",
+            )
+          ).rows,
+          [{ activities: null, connections: null }],
+        );
+        assert.equal(
+          (
+            await database.query(
+              "SELECT 1 FROM schema_migrations WHERE filename='004_remove_strava.sql'",
+            )
+          ).rowCount,
+          1,
+        );
+      }
+    } finally {
+      await database.end();
+      await db.pool.query(`DROP SCHEMA ${schema} CASCADE`);
+    }
+  },
+);
+
+integration(
   'ride lifecycle, participants, attendance and leaderboard use real PostgreSQL',
   async () => {
+    const member = `member-${randomUUID()}`;
     await rides.upsertUser('leader', 'Leader');
-    await rides.upsertUser('member', 'Member');
+    await rides.upsertUser(member, member);
     const ride = await rides.createRide({
       title: 'Morning ride',
       rideType: 'social',
@@ -73,79 +145,33 @@ integration(
       false,
     );
 
-    await rides.setParticipant(ride.id, 'member', 'going');
-    await rides.setParticipant(ride.id, 'member', 'maybe');
+    await rides.setParticipant(ride.id, member, 'going');
+    assert.equal(
+      (await rides.getLeaderboard()).some((row) => row.display_name === member),
+      false,
+    );
+    await rides.setParticipant(ride.id, member, 'maybe');
+    assert.equal(
+      (await rides.getLeaderboard()).some((row) => row.display_name === member),
+      false,
+    );
     assert.deepEqual(await rides.participantCounts(ride.id), {
       going: 0,
       maybe: 1,
     });
-    await rides.markAttendance(ride.id, 'member');
+    await rides.markAttendance(ride.id, member);
     assert.deepEqual(await rides.participantCounts(ride.id), {
       going: 1,
       maybe: 0,
     });
-    assert.equal((await rides.getLeaderboard())[0].display_name, 'Member');
+    assert.equal(
+      (await rides.getLeaderboard()).find((row) => row.display_name === member)?.points,
+      '10',
+    );
     assert.equal((await rides.cancelRide(ride.id))?.status, 'cancelled');
     assert.equal(
       (await rides.listUpcomingRides()).some((item) => item.id === ride.id),
       false,
-    );
-  },
-);
-
-integration(
-  'Strava activity matching is time-bounded and duplicate delivery is idempotent',
-  async () => {
-    await rides.upsertUser('athlete', 'Athlete');
-    const start = new Date(Date.now() + 7_200_000);
-    const ride = await rides.createRide({
-      title: 'Zwift',
-      rideType: 'social',
-      startsAt: start,
-      durationMinutes: 60,
-      creatorDiscordId: 'athlete',
-      channelId: 'channel',
-    });
-    await rides.setParticipant(ride.id, 'athlete', 'going');
-    await strava.saveConnection('athlete', {
-      access_token: 'access',
-      refresh_token: 'refresh',
-      expires_at: Math.floor(Date.now() / 1000) + 3600,
-      athlete: { id: 42 },
-    });
-
-    const mockFetch: typeof fetch = async () =>
-      new Response(
-        JSON.stringify({
-          id: 99,
-          name: 'Virtual',
-          sport_type: 'VirtualRide',
-          start_date: start.toISOString(),
-        }),
-        { status: 200 },
-      );
-    await strava.handleActivityWebhook(42, 99, mockFetch);
-    await strava.handleActivityWebhook(42, 99, mockFetch);
-    const activity = await db.pool.query(
-      'SELECT ride_id FROM activities WHERE strava_activity_id=99',
-    );
-    assert.equal(activity.rowCount, 1);
-    assert.equal(activity.rows[0].ride_id, ride.id);
-
-    const outside: typeof fetch = async () =>
-      new Response(
-        JSON.stringify({
-          id: 100,
-          sport_type: 'VirtualRide',
-          start_date: new Date(start.getTime() + 31 * 60_000).toISOString(),
-        }),
-        { status: 200 },
-      );
-    await strava.handleActivityWebhook(42, 100, outside);
-    assert.equal(
-      (await db.pool.query('SELECT ride_id FROM activities WHERE strava_activity_id=100')).rows[0]
-        .ride_id,
-      null,
     );
   },
 );
@@ -316,43 +342,3 @@ integration(
     );
   },
 );
-
-integration('expired Strava tokens refresh and API failures are surfaced', async () => {
-  await db.pool.query('UPDATE strava_connections SET expires_at=0 WHERE athlete_id=42');
-  const calls: string[] = [];
-  const refreshingFetch: typeof fetch = async (input) => {
-    calls.push(String(input));
-    if (String(input).includes('/oauth/token'))
-      return new Response(
-        JSON.stringify({
-          access_token: 'new-access',
-          refresh_token: 'new-refresh',
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-        }),
-        { status: 200 },
-      );
-    return new Response(
-      JSON.stringify({
-        id: 101,
-        sport_type: 'Ride',
-        start_date: new Date().toISOString(),
-      }),
-      { status: 200 },
-    );
-  };
-  await strava.handleActivityWebhook(42, 101, refreshingFetch);
-  assert.equal(calls.length, 2);
-
-  await assert.rejects(
-    () => strava.handleActivityWebhook(42, 102, async () => new Response('', { status: 500 })),
-    /token refresh failed|activity fetch failed/,
-  );
-  await strava.handleActivityWebhook(999999, 1, async () => {
-    throw new Error('must not fetch');
-  });
-  await strava.disconnectAthlete(42);
-  assert.equal(
-    (await db.pool.query('SELECT 1 FROM strava_connections WHERE athlete_id=42')).rowCount,
-    0,
-  );
-});

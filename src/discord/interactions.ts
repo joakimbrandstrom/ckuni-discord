@@ -19,7 +19,6 @@ import {
   updateRideTemplate,
   upsertUser,
 } from '../rides/repository.js';
-import { createStravaConnectUrl } from '../strava/routes.js';
 import {
   cancelScheduledEvent,
   createScheduledEvent,
@@ -454,24 +453,6 @@ async function handleCommand(interaction: DiscordInteraction): Promise<Record<st
   const user = getUser(interaction);
   if (!user) return ephemeral('Kunde inte identifiera Discord-användaren.');
   await upsertUser(user.id, displayName(user));
-
-  if (name === 'strava') {
-    const url = createStravaConnectUrl(user.id);
-    if (!url)
-      return ephemeral(
-        'Strava är inte konfigurerat på servern ännu. Discord-passen fungerar utan Strava.',
-      );
-    return response({
-      content: 'Anslut ditt Strava-konto till CK UNI. Det är frivilligt och gäller bara dig.',
-      flags: EPHEMERAL,
-      components: [
-        {
-          type: 1,
-          components: [{ type: 2, style: 5, label: 'Anslut med Strava', url }],
-        },
-      ],
-    });
-  }
 
   if (name === 'leaderboard') {
     const rows = await getLeaderboard();

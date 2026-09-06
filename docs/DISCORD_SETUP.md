@@ -81,11 +81,13 @@ Commands:
 - `/ride mall-lista`
 - `/ride mall-redigera`
 - `/ride mall-inaktivera`
-- `/strava connect`
 - `/leaderboard`
 
 `/ride mall-skapa` remains registered temporarily for backwards compatibility. The normal flow is
 to choose a template by name through `/ride create`.
+
+When upgrading to the Strava-free release, re-register commands using that release to remove the
+retired command from Discord. Follow the [retirement upgrade notes](LOCAL_DEPLOYMENT.md#strava-retirement-upgrade).
 
 ## Suggested CK UNI server permissions
 
@@ -126,7 +128,8 @@ The bot uses the server's existing channels and does not bootstrap or manage the
 ### `#zwift-ride`: official CK UNI Zwift rides
 
 This is the publication channel for structured rides that a `Ledare` has already created as a
-Zwift Club Event. The bot never creates a Zwift event and does not scrape Zwift.
+Zwift Club Event. The bot never creates a Zwift event, links fitness accounts, uses unofficial APIs
+or scrapes Zwift. CK UNI owns the attendance and leaderboard data; Zwift hosts the actual event.
 
 The normal leader flow is:
 
@@ -164,11 +167,18 @@ Suggested channel topic:
 
 > Officiella CK UNI-pass på Zwift. Ledare publicerar pass; välj Jag kommer eller Kanske på passkortet.
 
+Attendance storage and `/leaderboard` are preserved, but signup is not attendance confirmation.
+There is no new attendance UI until [#12](https://github.com/joakimbrandstrom/ckuni-discord/issues/12).
+The desired post-ride flow lets a signed-up member select `Jag var med`, then a leader reviews,
+confirms or removes members, adds missing participants and finalizes attendance. This is planned,
+not an instruction to use a currently available button.
+
 ### `#spontan-rides`: informal ride coordination
 
 This channel is normal Discord chat for spontaneous ride suggestions. Members may paste a Zwift
 event or Meetup link when they have one, but no link or special format is required. The bot does not
 create cards, Scheduled Events or reminders for spontaneous suggestions.
+Spontaneous rides are excluded from official attendance, leaderboard scoring and Winter Cup.
 
 Recommended overrides:
 

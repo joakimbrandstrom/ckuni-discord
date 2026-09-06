@@ -88,11 +88,6 @@ export const commands = [
     ],
   },
   {
-    name: 'strava',
-    description: 'Anslut valfria aktivitetsdata från Strava',
-    options: [{ type: 1, name: 'connect', description: 'Anslut ditt Strava-konto' }],
-  },
-  {
     name: 'leaderboard',
     description: 'Visa CK UNI:s deltagartabell',
   },
