@@ -3,7 +3,7 @@
 This is the recommended ingress model for running CK UNI Discord on a home server that otherwise stays behind VPN/Tailscale.
 
 ```text
-Discord / Strava
+Discord interactions
       |
       v
 Cloudflare HTTPS
@@ -122,13 +122,10 @@ Service:  http://bot:3000
 
 Cloudflare creates/proxies the DNS route for the selected hostname.
 
-### 3. Configure the application URL
+### 3. Start the tunnel
 
-Update `.env`:
-
-```dotenv
-PUBLIC_BASE_URL=https://bot.your-domain.example
-```
+The hostname is configured in Cloudflare and in Discord's Interactions Endpoint URL, not as a bot
+runtime base-URL setting.
 
 Start the permanent tunnel profile:
 
@@ -153,17 +150,6 @@ https://bot.your-domain.example/discord/interactions
 
 Discord validates the endpoint using a signed interaction. The CK UNI backend verifies Discord's Ed25519 signature before processing interactions.
 
-### 5. Configure Strava later
-
-Once Discord is stable, use the same hostname for Strava:
-
-```text
-OAuth callback: https://bot.your-domain.example/strava/oauth/callback
-Webhook:        https://bot.your-domain.example/strava/webhook
-```
-
-Do not make Strava part of the first `/ping` and `/ride create` test.
-
 ## Network exposure
 
 The base Compose file intentionally publishes the application only on loopback:
@@ -186,20 +172,21 @@ Your existing VPN/Tailscale setup can therefore remain unchanged for SSH, dashbo
 
 ## Public paths
 
-The public hostname is intended for the bot API only. Current routes are:
+The public hostname is intended for the bot API only. Routes in the Strava-free release are:
 
 ```text
 POST /discord/interactions
-GET  /strava/oauth/callback
-GET  /strava/webhook
-POST /strava/webhook
 GET  /health
 GET  /ready
 ```
 
 `/health` and `/ready` return only generic status information and no credentials or database details.
 
-For the first pilot, rely on application authentication/signature verification and Cloudflare's proxy/DDoS protection. Do not put Cloudflare Access login in front of the Discord or Strava callback paths because those external services cannot complete an interactive Access login.
+For the first pilot, rely on application authentication/signature verification and Cloudflare's proxy/DDoS protection. Do not put Cloudflare Access login in front of the Discord interaction endpoint because Discord cannot complete an interactive Access login.
+
+For an existing installation, follow the [retirement upgrade notes](LOCAL_DEPLOYMENT.md#strava-retirement-upgrade)
+to remove retired configuration and complete provider-side cleanup. Changing the tunnel alone does
+not retire the old integration.
 
 ## Troubleshooting
 

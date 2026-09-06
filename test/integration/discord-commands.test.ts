@@ -22,12 +22,6 @@ process.env.DISCORD_RIDE_LEADER_ROLE_ID = 'ride-leader';
 process.env.DISCORD_ADMIN_ROLE_ID = 'admin';
 process.env.LOG_LEVEL = 'silent';
 process.env.TIMEZONE = 'UTC';
-process.env.PUBLIC_BASE_URL = 'https://bot.example.test';
-process.env.STRAVA_CLIENT_ID = 'client';
-process.env.STRAVA_CLIENT_SECRET = 'secret';
-process.env.STRAVA_VERIFY_TOKEN = 'verify';
-process.env.STRAVA_STATE_SECRET = 'state-secret';
-process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString('base64');
 
 let app: FastifyInstance;
 let db: typeof import('../../src/db/pool.js');
@@ -68,7 +62,7 @@ before(async () => {
   const { migrate } = await import('../../src/db/migrate.js');
   await migrate(db.pool);
   await db.pool.query(
-    'TRUNCATE activities, strava_connections, ride_participants, ride_drafts, rides, ride_templates, users RESTART IDENTITY CASCADE',
+    'TRUNCATE ride_participants, ride_drafts, rides, ride_templates, users RESTART IDENTITY CASCADE',
   );
   const { buildApp } = await import('../../src/app.js');
   app = await buildApp();
@@ -350,9 +344,6 @@ integration(
     );
     const leaderboard = await send(interaction('leaderboard', 'member'));
     assert.match(leaderboard.json().data.content, /member.*10 poäng/i);
-
-    const strava = await send(interaction('strava', 'member'));
-    assert.match(strava.json().data.components[0].components[0].url, /\/strava\/oauth\?state=/);
 
     const memberCancel = await send(
       interaction('ride', 'member', [], {

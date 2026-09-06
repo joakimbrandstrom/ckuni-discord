@@ -22,7 +22,7 @@ const commandDefinitions = commands as Command[];
 test('Discord command names are unique and include the supported commands', () => {
   const names = commandDefinitions.map((command) => command.name);
   assert.equal(new Set(names).size, names.length);
-  assert.deepEqual(names, ['ping', 'ride', 'strava', 'leaderboard']);
+  assert.deepEqual(names, ['ping', 'ride', 'leaderboard']);
 });
 
 test('ride command exposes the supported subcommands and modal-based create', () => {

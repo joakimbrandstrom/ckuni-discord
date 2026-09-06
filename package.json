@@ -2,7 +2,7 @@
   "name": "ckuni-discord",
   "version": "0.1.0",
   "private": true,
-  "description": "CK UNI digital cycling clubhouse for Discord, Zwift and Strava",
+  "description": "CK UNI digital cycling clubhouse for Discord and Zwift",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -13,7 +13,6 @@
     "start": "node dist/src/index.js",
     "db:migrate": "tsx src/db/migrate.ts",
     "commands:register": "tsx src/discord/register-commands.ts",
-    "strava:webhook:create": "tsx src/strava/create-webhook.ts",
     "test": "tsx --test --test-concurrency=1 $(find test -name '*.test.ts' -print)",
     "test:integration": "tsx --test --test-concurrency=1 $(find test/integration -name '*.test.ts' -print)",
     "coverage": "c8 --reporter=text --reporter=lcov --all --src=src --extension=.ts --exclude-after-remap --check-coverage --lines=70 --branches=70 --functions=70 --statements=70 tsx --test --test-concurrency=1 $(find test -name '*.test.ts' -print)",

@@ -6,11 +6,7 @@ Never commit:
 
 - Discord bot token
 - Cloudflare Tunnel token
-- Strava client secret
-- Strava access/refresh tokens
 - PostgreSQL password
-- token encryption key
-- Strava state signing secret
 
 Keep these in `.env` on the host or migrate to a secret manager later.
 
@@ -34,18 +30,17 @@ http://bot:3000
 
 PostgreSQL has no published host port and must remain private.
 
-Current externally reachable application routes through the tunnel are:
+The Strava-free release exposes these application routes through the tunnel:
 
 - `POST /discord/interactions`
 - `GET /health`
 - `GET /ready`
-- `GET /strava/oauth/callback`
-- `GET /strava/webhook`
-- `POST /strava/webhook`
 
 `/health` and `/ready` return only generic state and no database details or credentials.
 
-Do not place an interactive Cloudflare Access login in front of Discord interactions or Strava callbacks; those machine-to-machine callers cannot complete an interactive login flow. If additional edge filtering is added later, ensure these callback routes remain reachable by Discord/Strava.
+Do not place an interactive Cloudflare Access login in front of Discord interactions; Discord cannot
+complete an interactive login flow. If additional edge filtering is added later, ensure the
+interaction endpoint remains reachable by Discord.
 
 ## Discord
 
@@ -53,21 +48,21 @@ All incoming Discord interactions are verified using the request signature, time
 
 Requests that fail signature verification must not be processed.
 
-## Strava
+## Data ownership and retirement
 
-Strava connections are opt-in. Access and refresh tokens are encrypted with AES-256-GCM before being written to PostgreSQL.
+CK UNI owns attendance and leaderboard data. The architecture has no Strava dependency,
+fitness-account linking, unofficial APIs or scraping. Member attendance reporting and leader review
+are planned in #12, not provided by this removal release.
 
-Generate the encryption key with:
+Existing deployments must follow the [retirement upgrade notes](docs/LOCAL_DEPLOYMENT.md#strava-retirement-upgrade).
+Removing application routes or database tables does not retire a provider-side webhook subscription
+or revoke access grants. Operators must retire the subscription, revoke provider access and remove
+retired deployment configuration, including the encryption key and `PUBLIC_BASE_URL`.
 
-```bash
-openssl rand -base64 32
-```
-
-Generate a state signing secret with:
-
-```bash
-openssl rand -hex 32
-```
+Backups can retain historic activity data, connection records and encrypted tokens after live tables
+are dropped. Protect them as sensitive data and apply the operator's retention/deletion policy;
+the migration does not purge backups. These notes do not establish that production retirement or
+provider-side cleanup has been completed.
 
 ## Home-server boundary
 
