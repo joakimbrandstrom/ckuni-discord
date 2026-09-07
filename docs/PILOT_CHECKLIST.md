@@ -12,38 +12,41 @@ roller har konfigurerats enligt [Discord-guiden](DISCORD_SETUP.md).
 
 ## Acceptanstest
 
-1. [ ] Skapa ett riktigt eller testbaserat CK UNI Club Event i Zwift.
-2. [ ] Kopiera Zwift-evenemangets URL och uppgifter.
+1. [ ] Skapa ett riktigt eller testbaserat CK UNI Club Event i Zwift Companion.
+2. [ ] Kopiera Zwift-evenemangets URL. Kontrollera att inga Zwift-inloggningsuppgifter efterfrågas.
 3. [ ] Kör `/ride create` som `Ledare`. Kontrollera att aktiva mallar visas med namn och att
-       `Kopiera senaste passet`, `Skapa nytt pass` och `Avbryt` visas på både mobil och desktop.
-4. [ ] Välj en mall, ett kopierat pass eller ett nytt pass. Ange separat datum och tid, välj passtyp
-       och klistra in Zwift-länken utan särskilda fritextprefix.
-5. [ ] Kontrollera previewn och rätt målkanal. Kontrollera från ett annat konto att inget publikt
+       högst tre snabbmallar, `Andra mallar`, `Kopiera senaste`, `Skapa nytt pass` och `Avbryt` är
+       enkla att nå på både mobil och desktop.
+4. [ ] Välj en schemalagd snabbmall. Kontrollera att datum och tid redan visar nästa veckotillfälle i
+       CK UNI:s tidszon och att endast den nya Zwift-länken behöver klistras in.
+5. [ ] Välj en mall utan veckotid och kontrollera att den befintliga manuella datum/tid-vägen finns
+       kvar. Välj även `Kopiera senaste` och kontrollera nästa veckas tid samt tom Zwift-länk.
+6. [ ] Kontrollera previewn och rätt målkanal. Kontrollera från ett annat konto att inget publikt
        passkort eller Scheduled Event finns innan `Publicera` väljs.
-6. [ ] Redigera grunduppgifter och detaljer från previewn. Kontrollera att previewn uppdateras och
+7. [ ] Redigera grunduppgifter och detaljer från previewn. Kontrollera att previewn uppdateras och
        att utkastet fortfarande är privat.
-7. [ ] Välj `Publicera` och kontrollera att exakt ett passkort visas i `#zwift-ride` och exakt ett
+8. [ ] Välj `Publicera` och kontrollera att exakt ett passkort visas i `#zwift-ride` och exakt ett
        Discord Scheduled Event skapas med rätt tid, längd och detaljer.
-8. [ ] Dubbelklicka eller försök publicera samma preview igen. Kontrollera att ingen dubblett av
+9. [ ] Dubbelklicka eller försök publicera samma preview igen. Kontrollera att ingen dubblett av
        ride, passkort eller Scheduled Event skapas.
-9. [ ] Skapa och avbryt ett separat utkast. Kontrollera att det inte kan publiceras.
-10. [ ] Välj `Jag kommer` och sedan `Kanske` från ett annat Discord-konto. Kontrollera att valet och
+10. [ ] Skapa och avbryt ett separat utkast. Kontrollera att det inte kan publiceras.
+11. [ ] Välj `Jag kommer` och sedan `Kanske` från ett annat Discord-konto. Kontrollera att valet och
        räknarna uppdateras.
-11. [ ] Kontrollera behörigheterna för alla fyra rollerna: `Ledare` och `System Admin` får skapa,
+12. [ ] Kontrollera behörigheterna för alla fyra rollerna: `Ledare` och `System Admin` får skapa,
        redigera och ställa in; `CK UNI Rider` och `Gäst` får inte göra det.
-12. [ ] Kör `/ride edit`. Kontrollera efter omladdning att databasens uppgifter, samma passkort och
+13. [ ] Kör `/ride edit`. Kontrollera efter omladdning att databasens uppgifter, samma passkort och
        samma Scheduled Event har uppdaterats utan dubbletter.
-13. [ ] Kör `/ride cancel`. Kontrollera att passkortet tydligt visar **INSTÄLLT**, knapparna är
+14. [ ] Kör `/ride cancel`. Kontrollera att passkortet tydligt visar **INSTÄLLT**, knapparna är
        avstängda och Scheduled Event är borttaget/inställt.
-14. [ ] Skapa ett utkast, starta om boten och fortsätt flödet. Skapa därefter ett framtida pass och
+15. [ ] Skapa ett utkast, starta om boten och fortsätt flödet. Skapa därefter ett framtida pass och
        kontrollera att passet och
        deltagarvalen finns kvar och att inga dubbletter publiceras.
-15. [ ] Skapa ett testpass ungefär 35 minuter framåt. Låt boten köra och kontrollera att den svenska
+16. [ ] Skapa ett testpass ungefär 35 minuter framåt. Låt boten köra och kontrollera att den svenska
          30-minuterspåminnelsen skickas en gång, även om boten startas om efter att den skickats.
-16. [ ] Skriv ett vanligt meddelande om ett spontanpass i `#spontan-rides`, gärna med en Zwift- eller
+17. [ ] Skriv ett vanligt meddelande om ett spontanpass i `#spontan-rides`, gärna med en Zwift- eller
           Meetup-länk.
-17. [ ] Kontrollera att en annan medlem kan svara och reagera utan att boten skapar passkort,
-         Scheduled Event eller påminnelser för förslaget.
+18. [ ] Kontrollera att en annan medlem kan svara och reagera utan att boten skapar passkort,
+          Scheduled Event eller påminnelser för förslaget.
 
 ## Pilotens utfall
 

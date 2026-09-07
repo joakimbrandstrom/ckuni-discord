@@ -16,7 +16,30 @@ export type CreateRideFields = {
   notes?: string;
 };
 
-export type TemplateFields = Omit<CreateRideFields, 'startsAt' | 'zwiftUrl'> & { name: string };
+export type TemplateFields = Omit<CreateRideFields, 'startsAt' | 'zwiftUrl'> & {
+  name: string;
+  defaultWeekday?: number;
+  defaultStartTime?: string;
+  quickCreate: boolean;
+  sortOrder: number;
+};
+
+const WEEKDAYS: Record<string, number> = {
+  måndag: 1,
+  monday: 1,
+  tisdag: 2,
+  tuesday: 2,
+  onsdag: 3,
+  wednesday: 3,
+  torsdag: 4,
+  thursday: 4,
+  fredag: 5,
+  friday: 5,
+  lördag: 6,
+  saturday: 6,
+  söndag: 7,
+  sunday: 7,
+};
 
 function required(value: string | undefined, label: string): string {
   const trimmed = value?.trim();
@@ -208,7 +231,37 @@ export function parseCreateRideFields(
 }
 
 export function parseTemplateFields(fields: Record<string, string | undefined>): TemplateFields {
-  const details = parseRideDetails(fields.details);
+  let defaultWeekday: number | undefined;
+  let defaultStartTime: string | undefined;
+  let quickCreate = false;
+  let sortOrder = 0;
+  const detailLines: string[] = [];
+  for (const line of fields.details?.split('\n') ?? []) {
+    const schedule = /^Veckotid:\s*(\S+)\s+(\d{2}:\d{2})\s*$/i.exec(line);
+    if (schedule) {
+      defaultWeekday = WEEKDAYS[schedule[1].toLowerCase()];
+      if (!defaultWeekday || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(schedule[2])) {
+        throw new Error('Veckotid måste skrivas som exempelvis tisdag 18:00.');
+      }
+      defaultStartTime = schedule[2];
+      continue;
+    }
+    if (/^Veckotid:/i.test(line)) {
+      throw new Error('Veckotid måste skrivas som exempelvis tisdag 18:00.');
+    }
+    const quick = /^Snabbval:\s*(ja|nej|\d+)\s*$/i.exec(line);
+    if (quick) {
+      quickCreate = quick[1].toLowerCase() !== 'nej';
+      sortOrder = /^\d+$/.test(quick[1]) ? Number(quick[1]) : 0;
+      if (sortOrder > 999) throw new Error('Snabbvalets ordning måste vara mellan 0 och 999.');
+      continue;
+    }
+    if (/^Snabbval:/i.test(line)) {
+      throw new Error('Snabbval måste vara ja, nej eller ett ordningsnummer.');
+    }
+    detailLines.push(line);
+  }
+  const details = parseRideDetails(detailLines.join('\n'));
   return {
     name: required(fields.name, 'Mallnamn'),
     title: required(fields.title, 'Titel'),
@@ -218,6 +271,10 @@ export function parseTemplateFields(fields: Record<string, string | undefined>):
     routeWorld: details.routeWorld,
     paceWorkout: details.paceWorkout,
     notes: details.notes,
+    defaultWeekday,
+    defaultStartTime,
+    quickCreate,
+    sortOrder,
   };
 }
 

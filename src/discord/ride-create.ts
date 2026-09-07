@@ -114,26 +114,24 @@ function basicModal(draft: RideDraft): Record<string, unknown> {
 function scheduleModal(draft: RideDraft, title: string): Record<string, unknown> {
   const local = localStart(draft);
   return modal(`ride_draft_schedule:${draft.id}`, title.slice(0, 45), [
-    textInputLabel('date', 'Datum', {
-      description: 'Datum i svensk tid, exempel 2026-09-15',
-      placeholder: 'ÅÅÅÅ-MM-DD',
-      maxLength: 10,
-      value: local?.toFormat('yyyy-MM-dd'),
-    }),
-    textInputLabel('time', 'Tid', {
-      description: `Starttid i ${config.TIMEZONE}, exempel 18:30`,
-      placeholder: 'TT:mm',
-      maxLength: 5,
-      value: local?.toFormat('HH:mm'),
-    }),
     textInputLabel('zwift_url', 'Zwift-länk (valfri)', {
       placeholder: 'https://www.zwift.com/events/...',
       required: false,
       maxLength: 500,
       value: draft.zwift_url ?? undefined,
     }),
-    textInputLabel('extra_comment', 'Extra kommentar eller ändring', {
-      description: 'Visas som en anteckning utöver mallens eller det kopierade passets innehåll.',
+    textInputLabel('date', 'Datum', {
+      placeholder: 'ÅÅÅÅ-MM-DD',
+      maxLength: 10,
+      value: local?.toFormat('yyyy-MM-dd'),
+    }),
+    textInputLabel('time', 'Tid', {
+      description: config.TIMEZONE,
+      placeholder: 'TT:mm',
+      maxLength: 5,
+      value: local?.toFormat('HH:mm'),
+    }),
+    textInputLabel('extra_comment', 'Extra kommentar (valfri)', {
       required: false,
       style: 2,
       maxLength: 1000,
@@ -182,7 +180,12 @@ function previewData(draft: RideDraft, flags = false): Record<string, unknown> {
     return { content: 'Utkastet saknar grunduppgifter.', ...(flags ? { flags: EPHEMERAL } : {}) };
   }
   const hasDetails = Boolean(
-    draft.zwift_url || draft.description || draft.route_world || draft.pace_workout || draft.notes,
+    draft.zwift_url ||
+      draft.description ||
+      draft.route_world ||
+      draft.pace_workout ||
+      draft.notes ||
+      draft.extra_comment,
   );
   return {
     content: `**Förhandsvisning**\nPasset publiceras i <#${draft.discord_channel_id}> först när du väljer **Publicera**.`,
@@ -197,7 +200,10 @@ function previewData(draft: RideDraft, flags = false): Record<string, unknown> {
           zwift_url: draft.zwift_url,
           route_world: draft.route_world,
           pace_workout: draft.pace_workout,
-          notes: [draft.notes, draft.extra_comment].filter(Boolean).join('\n') || null,
+          notes:
+            [draft.notes, draft.extra_comment ? `Extra kommentar: ${draft.extra_comment}` : null]
+              .filter(Boolean)
+              .join('\n') || null,
         },
         config.TIMEZONE,
       ),
@@ -257,10 +263,24 @@ export async function openRideCreateBuilder(
 ): Promise<Record<string, unknown>> {
   await cleanupRideDrafts();
   const templates = await listActiveRideTemplates();
-  const pageCount = Math.max(1, Math.ceil(templates.length / 25));
+  const quickTemplates = templates.filter((template) => template.quick_create).slice(0, 3);
+  const quickIds = new Set(quickTemplates.map((template) => template.id));
+  const otherTemplates = templates.filter((template) => !quickIds.has(template.id));
+  const pageCount = Math.max(1, Math.ceil(otherTemplates.length / 25));
   const page = Math.min(Math.max(0, requestedPage), pageCount - 1);
-  const visibleTemplates = templates.slice(page * 25, (page + 1) * 25);
+  const visibleTemplates = otherTemplates.slice(page * 25, (page + 1) * 25);
   const components: Array<Record<string, unknown>> = [];
+  if (quickTemplates.length) {
+    components.push({
+      type: ComponentType.ActionRow,
+      components: quickTemplates.map((template) => ({
+        type: ComponentType.Button,
+        style: 1,
+        label: template.name.slice(0, 80),
+        custom_id: `ride_create_quick:${template.id}`,
+      })),
+    });
+  }
   if (visibleTemplates.length) {
     components.push({
       type: ComponentType.ActionRow,
@@ -268,7 +288,7 @@ export async function openRideCreateBuilder(
         {
           type: ComponentType.StringSelect,
           custom_id: 'ride_create_template',
-          placeholder: 'Välj en passmall',
+          placeholder: 'Andra mallar',
           options: visibleTemplates.map((template) => ({
             label: template.name.slice(0, 100),
             value: template.id,
@@ -282,7 +302,7 @@ export async function openRideCreateBuilder(
     {
       type: ComponentType.Button,
       style: 2,
-      label: 'Kopiera senaste passet',
+      label: 'Kopiera senaste',
       custom_id: 'ride_create_copy',
     },
     {
@@ -325,8 +345,8 @@ export async function openRideCreateBuilder(
   return response(
     {
       content: templates.length
-        ? `Välj en mall, kopiera ditt senaste officiella pass eller skapa ett nytt.${pageCount > 1 ? ` Mallsida ${page + 1} av ${pageCount}.` : ''}`
-        : 'Det finns inga aktiva mallar. Kopiera ditt senaste officiella pass eller skapa ett nytt.',
+        ? `**Skapa CK UNI-pass**${pageCount > 1 ? ` · mallsida ${page + 1}/${pageCount}` : ''}`
+        : '**Skapa CK UNI-pass**\nIngen aktiv mall finns ännu.',
       components,
       ...(responseType === 4 ? { flags: EPHEMERAL } : {}),
     },
@@ -339,7 +359,7 @@ export async function openTemplateRideDraft(
   channelId: string,
   templateId: string,
 ): Promise<Record<string, unknown>> {
-  const draft = await createRideDraftFromTemplate(user.id, templateId, channelId);
+  const draft = await createRideDraftFromTemplate(user.id, templateId, channelId, config.TIMEZONE);
   if (!draft) return ephemeral('Mallen finns inte eller är inaktiverad.');
   return scheduleModal(draft, `Skapa ${draft.title ?? 'pass'}`);
 }
@@ -443,8 +463,16 @@ export async function handleRideCreateComponent(
     if (!templateId) return ephemeral('Välj en giltig passmall.');
     return openTemplateRideDraft(user, interaction.channel_id, templateId);
   }
+  if (customId.startsWith('ride_create_quick:')) {
+    const templateId = customId.split(':')[1];
+    return openTemplateRideDraft(user, interaction.channel_id, templateId);
+  }
   if (customId === 'ride_create_copy') {
-    const draft = await createRideDraftFromLatestRide(user.id, interaction.channel_id);
+    const draft = await createRideDraftFromLatestRide(
+      user.id,
+      interaction.channel_id,
+      config.TIMEZONE,
+    );
     if (!draft) return ephemeral('Du har inget tidigare officiellt pass att kopiera.');
     return scheduleModal(draft, 'Kopiera senaste passet');
   }

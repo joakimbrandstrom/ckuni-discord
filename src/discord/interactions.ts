@@ -79,8 +79,17 @@ function detailsValue(input: {
   pace_workout?: string | null;
   zwift_url?: string | null;
   notes?: string | null;
+  default_weekday?: number | null;
+  default_start_time?: string | null;
+  quick_create?: boolean;
+  sort_order?: number;
 }): string | undefined {
+  const weekdays = ['', 'måndag', 'tisdag', 'onsdag', 'torsdag', 'fredag', 'lördag', 'söndag'];
   const lines = [
+    input.default_weekday && input.default_start_time
+      ? `Veckotid: ${weekdays[input.default_weekday]} ${input.default_start_time.slice(0, 5)}`
+      : undefined,
+    input.quick_create ? `Snabbval: ${input.sort_order ?? 0}` : undefined,
     input.description ? `Beskrivning: ${input.description}` : undefined,
     input.route_world ? `Rutt/värld: ${input.route_world}` : undefined,
     input.pace_workout ? `Tempo/träning: ${input.pace_workout}` : undefined,
@@ -162,6 +171,10 @@ function templateModal(
     route_world?: string | null;
     pace_workout?: string | null;
     notes?: string | null;
+    default_weekday?: number | null;
+    default_start_time?: string | null;
+    quick_create?: boolean;
+    sort_order?: number;
   },
 ): Record<string, unknown> {
   return response(
@@ -183,8 +196,9 @@ function templateModal(
             default: option.value === initial?.ride_type,
           })),
         ),
-        textInputLabel('details', 'Mallens passuppgifter', {
-          placeholder: 'Beskrivning: ...\nRutt/värld: ...\nTempo/träning: ...\nAnteckningar: ...',
+        textInputLabel('details', 'Schema, snabbval och detaljer', {
+          description: 'Valfritt. Snabbvalets nummer styr ordningen.',
+          placeholder: 'Veckotid: tisdag 18:00\nSnabbval: 1\nBeskrivning: ...\nRutt/värld: ...',
           required: false,
           style: 2,
           maxLength: 2000,
@@ -321,10 +335,15 @@ async function handleEditRideSubmit(
 async function handleTemplateList(): Promise<Record<string, unknown>> {
   const templates = await listRideTemplates();
   if (!templates.length) return ephemeral('Det finns inga sparade passmallar.');
-  const lines = templates.map(
-    (template) =>
-      `**#${template.id}** — ${template.name} — ${template.title} (${template.duration_minutes} min)${template.active ? '' : ' — inaktiverad'}`,
-  );
+  const weekdays = ['', 'mån', 'tis', 'ons', 'tors', 'fre', 'lör', 'sön'];
+  const lines = templates.map((template) => {
+    const schedule =
+      template.default_weekday && template.default_start_time
+        ? ` · ${weekdays[template.default_weekday]} ${template.default_start_time.slice(0, 5)}`
+        : '';
+    const quick = template.quick_create ? ` · snabbval ${template.sort_order}` : '';
+    return `**#${template.id}** · ${template.name} · ${template.title} (${template.duration_minutes} min)${schedule}${quick}${template.active ? '' : ' · inaktiverad'}`;
+  });
   return ephemeral(`### Passmallar\n${lines.join('\n')}`);
 }
 

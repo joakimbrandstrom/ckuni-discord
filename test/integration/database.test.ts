@@ -41,6 +41,7 @@ integration('migrations are repeatable', async () => {
       '002_ride_metadata_and_templates.sql',
       '003_ride_creation_drafts.sql',
       '004_remove_strava.sql',
+      '005_ride_template_scheduling.sql',
     ],
   );
 });
@@ -187,17 +188,36 @@ integration(
       description: 'Fyra block',
       rideType: 'intervals',
       durationMinutes: 60,
+      defaultWeekday: 2,
+      defaultStartTime: '18:00',
+      quickCreate: true,
+      sortOrder: 1,
       creatorDiscordId: `template-leader-${suffix}`,
     });
     assert.equal((await rides.getRideTemplate(template.id))?.active, true);
+    assert.equal((await rides.getRideTemplate(template.id))?.default_weekday, 2);
 
     const updated = await rides.updateRideTemplate(template.id, {
       name: `Tisdagsintervaller ${suffix}`,
       title: 'Nya intervaller',
       rideType: 'intervals',
       durationMinutes: 75,
+      defaultWeekday: 2,
+      defaultStartTime: '18:30',
+      quickCreate: true,
+      sortOrder: 2,
     });
     assert.equal(updated?.duration_minutes, 75);
+    assert.equal(updated?.default_start_time?.slice(0, 5), '18:30');
+    assert.equal(updated?.quick_create, true);
+    const scheduledDraft = await drafts.createRideDraftFromTemplate(
+      `template-leader-${suffix}`,
+      template.id,
+      'channel',
+      'Europe/Stockholm',
+      new Date('2026-09-06T10:00:00Z'),
+    );
+    assert.equal(scheduledDraft?.starts_at?.toISOString(), '2026-09-08T16:30:00.000Z');
 
     const start = new Date(Date.now() + 86_400_000);
     await rides.createRide({
@@ -246,9 +266,15 @@ integration(
       creatorDiscordId: owner,
     });
 
-    const draft = await drafts.createRideDraftFromTemplate(owner, template.id, 'ride-channel');
+    const draft = await drafts.createRideDraftFromTemplate(
+      owner,
+      template.id,
+      'ride-channel',
+      'Europe/Stockholm',
+    );
     assert.ok(draft);
     assert.equal(draft.title, 'Tisdagsintervaller');
+    assert.equal(draft.starts_at, null);
     assert.equal(await drafts.getRideDraft(draft.id, other), null);
     assert.equal(
       (
@@ -284,11 +310,17 @@ integration(
       1,
     );
 
-    const copied = await drafts.createRideDraftFromLatestRide(owner, 'other-channel');
+    const copied = await drafts.createRideDraftFromLatestRide(
+      owner,
+      'other-channel',
+      'Europe/Stockholm',
+    );
     assert.ok(copied);
     assert.equal(copied.title, first.ride.title);
-    assert.equal(copied.starts_at, null);
+    assert.ok(copied.starts_at);
+    assert.ok(new Date(copied.starts_at).getTime() > new Date(first.ride.starts_at).getTime());
     assert.equal(copied.zwift_url, null);
+    assert.equal(copied.notes, 'Samling i röstkanalen');
     assert.equal(copied.published_ride_id, null);
     assert.equal(copied.status, 'active');
 
@@ -330,6 +362,7 @@ integration(
       owner,
       inactiveTemplate.id,
       'ride-channel',
+      'Europe/Stockholm',
     );
     assert.ok(inactiveDraft);
     await drafts.updateRideDraftSchedule(inactiveDraft.id, owner, {
