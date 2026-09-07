@@ -34,13 +34,14 @@ jobs:
 
       - name: Scan repository
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: "true"
         with:
           version: v0.72.0
           scan-type: fs
           scan-ref: .
           scanners: vuln,secret,misconfig
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-          ignore-unfixed: true
           format: json
           output: trivy-repository.json
           exit-code: "0"
@@ -80,7 +81,6 @@ jobs:
           image-ref: ckuni-discord:ci
           scanners: vuln
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-          ignore-unfixed: true
           format: json
           output: trivy-image.json
           exit-code: "0"
@@ -127,7 +127,7 @@ jobs:
             echo "| Low | $REPOSITORY_LOW | $IMAGE_LOW | $(total "$REPOSITORY_LOW" "$IMAGE_LOW") |"
             echo "| Unknown | $REPOSITORY_UNKNOWN | $IMAGE_UNKNOWN | $(total "$REPOSITORY_UNKNOWN" "$IMAGE_UNKNOWN") |"
             echo
-            echo '_Only vulnerabilities with an available fix are included._'
+            echo '_Counts include vulnerabilities without an available fix. Repository counts also include development dependencies._'
           } > trivy-summary.md
           cat trivy-summary.md >> "$GITHUB_STEP_SUMMARY"
 
