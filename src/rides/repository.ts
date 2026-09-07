@@ -32,6 +32,25 @@ export type RideTemplate = {
   notes: string | null;
   creator_discord_id: string;
   active: boolean;
+  default_weekday: number | null;
+  default_start_time: string | null;
+  quick_create: boolean;
+  sort_order: number;
+};
+
+type RideTemplateFields = {
+  name: string;
+  title: string;
+  description?: string;
+  rideType: string;
+  durationMinutes: number;
+  routeWorld?: string;
+  paceWorkout?: string;
+  notes?: string;
+  defaultWeekday?: number;
+  defaultStartTime?: string;
+  quickCreate?: boolean;
+  sortOrder?: number;
 };
 
 export async function upsertUser(discordId: string, displayName: string): Promise<void> {
@@ -126,22 +145,17 @@ export async function updateRide(
   return result.rows[0] ?? null;
 }
 
-export async function createRideTemplate(input: {
-  name: string;
-  title: string;
-  description?: string;
-  rideType: string;
-  durationMinutes: number;
-  routeWorld?: string;
-  paceWorkout?: string;
-  notes?: string;
-  creatorDiscordId: string;
-}): Promise<RideTemplate> {
+export async function createRideTemplate(
+  input: RideTemplateFields & {
+    creatorDiscordId: string;
+  },
+): Promise<RideTemplate> {
   const result = await pool.query<RideTemplate>(
     `INSERT INTO ride_templates(
        name, title, description, ride_type, duration_minutes, route_world,
-       pace_workout, notes, creator_discord_id
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       pace_workout, notes, default_weekday, default_start_time, quick_create,
+       sort_order, creator_discord_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      RETURNING *`,
     [
       input.name,
@@ -152,6 +166,10 @@ export async function createRideTemplate(input: {
       input.routeWorld ?? null,
       input.paceWorkout ?? null,
       input.notes ?? null,
+      input.defaultWeekday ?? null,
+      input.defaultStartTime ?? null,
+      input.quickCreate ?? false,
+      input.sortOrder ?? 0,
       input.creatorDiscordId,
     ],
   );
@@ -167,34 +185,27 @@ export async function getRideTemplate(templateId: string): Promise<RideTemplate 
 
 export async function listRideTemplates(): Promise<RideTemplate[]> {
   const result = await pool.query<RideTemplate>(
-    'SELECT * FROM ride_templates ORDER BY active DESC, name ASC',
+    'SELECT * FROM ride_templates ORDER BY active DESC, quick_create DESC, sort_order ASC, name ASC',
   );
   return result.rows;
 }
 
 export async function listActiveRideTemplates(): Promise<RideTemplate[]> {
   const result = await pool.query<RideTemplate>(
-    'SELECT * FROM ride_templates WHERE active=TRUE ORDER BY name ASC',
+    'SELECT * FROM ride_templates WHERE active=TRUE ORDER BY quick_create DESC, sort_order ASC, name ASC',
   );
   return result.rows;
 }
 
 export async function updateRideTemplate(
   templateId: string,
-  input: {
-    name: string;
-    title: string;
-    description?: string;
-    rideType: string;
-    durationMinutes: number;
-    routeWorld?: string;
-    paceWorkout?: string;
-    notes?: string;
-  },
+  input: RideTemplateFields,
 ): Promise<RideTemplate | null> {
   const result = await pool.query<RideTemplate>(
     `UPDATE ride_templates SET name=$2, title=$3, description=$4, ride_type=$5,
-       duration_minutes=$6, route_world=$7, pace_workout=$8, notes=$9, updated_at=NOW()
+       duration_minutes=$6, route_world=$7, pace_workout=$8, notes=$9,
+       default_weekday=$10, default_start_time=$11, quick_create=$12, sort_order=$13,
+       updated_at=NOW()
      WHERE id=$1 RETURNING *`,
     [
       templateId,
@@ -206,6 +217,10 @@ export async function updateRideTemplate(
       input.routeWorld ?? null,
       input.paceWorkout ?? null,
       input.notes ?? null,
+      input.defaultWeekday ?? null,
+      input.defaultStartTime ?? null,
+      input.quickCreate ?? false,
+      input.sortOrder ?? 0,
     ],
   );
   return result.rows[0] ?? null;

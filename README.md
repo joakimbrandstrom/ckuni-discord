@@ -178,16 +178,29 @@ See [`docs/CLOUDFLARE_TUNNEL.md`](docs/CLOUDFLARE_TUNNEL.md) for the exact Cloud
 /ride edit id:12
 ```
 
-Create the real event in Zwift Companion first, then run `/ride create` in Discord. The bot shows
-an ephemeral builder where a Ride Leader or administrator can choose an active template by name,
-copy their latest official ride, or create a new ride. Date and time are separate fields, and ride
-type is selected from a list rather than entered as free text.
+The intended leader flow is:
+
+1. Create the official event in Zwift Companion.
+2. Copy the Zwift event URL.
+3. Run `/ride create` in Discord.
+4. Select a common template or `Kopiera senaste`.
+5. Verify the proposed date and time.
+6. Paste the Zwift URL.
+7. Review the private preview.
+8. Select `Publicera`.
+
+Up to three common templates appear as direct mobile-friendly buttons. Other templates remain in
+the `Andra mallar` dropdown. A scheduled template proposes its next weekday and time in the
+configured CK UNI timezone. Copying the latest official ride preserves its reusable details,
+clears its old Zwift URL and proposes the next weekly occurrence. The leader can always adjust the
+date and time before continuing.
 
 Each form step is saved as a PostgreSQL draft and followed by a preview. Nothing public is created
 until the leader selects `Publicera`. The confirmation creates the ride, adds the leader as going,
 posts the card with `Jag kommer` and `Kanske`, and creates the Discord Scheduled Event. A partial
 Discord failure can be retried without reposting completed steps. Zwift remains the source of truth;
-the bot does not create or scrape Zwift events.
+Discord does not create the Zwift event, call a Zwift API, scrape Zwift or store Zwift credentials.
+The pasted event URL is the only integration point.
 
 Ride Leaders and administrators can edit upcoming rides with `/ride edit`; the existing card and
 Scheduled Event are updated.
@@ -216,7 +229,17 @@ as cancelled, disables its participation buttons and cancels the Discord Schedul
 /ride mall-inaktivera id:3
 ```
 
-Templates keep the reusable title, duration, ride type and optional ride details. Use `/ride create`
+Templates keep the reusable title, duration, ride type and optional ride details. In the existing
+template form, add these optional lines under `Schema, snabbval och detaljer`:
+
+```text
+Veckotid: tisdag 18:00
+Snabbval: 1
+Beskrivning: Fyra intervallblock
+```
+
+`Veckotid` sets the normal weekly start. `Snabbval` pins the template as a direct button; its number
+sets ordering. Omit either line for a manually scheduled or non-pinned template. Use `/ride create`
 and select the template by name to create a ride from it. The older `/ride mall-skapa id:3` command
 is temporarily available for backwards compatibility and opens the same draft and preview flow.
 
@@ -252,10 +275,11 @@ excluded from official attendance, leaderboard scoring and Winter Cup.
 - `ride_participants`
 - `schema_migrations`
 
-SQL migrations live in [`migrations/`](migrations/). This list describes the retained data model;
-the removal release's new `004_remove_strava.sql` drops the retired activity and connection tables
-while preserving `ride_participants.attended_at`. See the upgrade notes before migrating an
-existing database.
+SQL migrations live in [`migrations/`](migrations/). They are append-only. Migration
+`005_ride_template_scheduling.sql` adds nullable weekly schedule fields plus quick-create ordering;
+existing templates remain valid and continue to use manual date/time entry. The earlier
+`004_remove_strava.sql` drops the retired activity and connection tables while preserving
+`ride_participants.attended_at`. See the upgrade notes before migrating an existing database.
 
 ## Security
 

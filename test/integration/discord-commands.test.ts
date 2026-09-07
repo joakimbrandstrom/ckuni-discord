@@ -175,7 +175,7 @@ integration(
     );
     assert.equal(opened.json().type, 4);
     assert.equal(opened.json().data.flags, 64);
-    assert.match(JSON.stringify(opened.json().data.components), /Kopiera senaste passet/);
+    assert.match(JSON.stringify(opened.json().data.components), /Kopiera senaste/);
     assert.match(JSON.stringify(opened.json().data.components), /Skapa nytt pass/);
 
     const noPrevious = await send(component('ride_create_copy', 'new-leader', ['ride-leader']));
@@ -392,7 +392,8 @@ integration(
         title: 'Tisdagsintervaller',
         duration: '60',
         ride_type: 'intervaller',
-        details: 'Beskrivning: Fyra block\nRutt/värld: Watopia',
+        details:
+          'Veckotid: tisdag 18:00\nSnabbval: 1\nBeskrivning: Fyra block\nRutt/värld: Watopia',
       }),
     );
     const templateId = /#(\d+)/.exec(savedTemplate.json().data.content)?.[1];
@@ -402,12 +403,26 @@ integration(
        SELECT 'ZZ Mall ' || LPAD(value::text, 2, '0'), 'Pass ' || value, 'social', 60, 'leader'
        FROM generate_series(0, 25) AS value`,
     );
+    await db.pool.query(
+      `INSERT INTO ride_templates(
+         name, title, ride_type, duration_minutes, creator_discord_id, quick_create, sort_order
+       ) VALUES
+         ('Snabbmall A', 'Snabbpass A', 'social', 60, 'leader', TRUE, 10),
+         ('Snabbmall B', 'Snabbpass B', 'social', 60, 'leader', TRUE, 11),
+         ('Snabbmall C', 'Snabbpass C', 'social', 60, 'leader', TRUE, 12)`,
+    );
 
     const builderWithTemplate = await send(
       interaction('ride', 'leader', ['ride-leader'], { options: subcommand('create') }),
     );
     const builderJson = JSON.stringify(builderWithTemplate.json().data.components);
     assert.match(builderJson, /Tisdagsmall/);
+    assert.match(builderJson, /ride_create_quick/);
+    assert.match(builderJson, /Andra mallar/);
+    assert.equal(builderJson.match(/ride_create_quick/g)?.length, 3);
+    assert.match(builderJson, /Snabbmall B/);
+    assert.doesNotMatch(builderJson, /Snabbmall C.*ride_create_quick/);
+    assert.match(builderJson, /Snabbpass C/);
     assert.match(builderJson, /Fler mallar/);
     assert.doesNotMatch(builderJson, /Mall-ID|#\d+/);
     const nextTemplatePage = await send(
@@ -417,10 +432,19 @@ integration(
     assert.match(JSON.stringify(nextTemplatePage.json().data.components), /ZZ Mall 25/);
 
     const createFromTemplate = await send(
-      component('ride_create_template', 'leader', ['ride-leader'], [templateId]),
+      component(`ride_create_quick:${templateId}`, 'leader', ['ride-leader']),
     );
     assert.equal(createFromTemplate.json().type, 9);
     const templateDraftId = draftIdFrom(createFromTemplate.json());
+    const proposedTemplateDraft = await db.pool.query(
+      'SELECT starts_at FROM ride_drafts WHERE id=$1',
+      [templateDraftId],
+    );
+    const proposedTemplateStart = DateTime.fromJSDate(proposedTemplateDraft.rows[0].starts_at, {
+      zone: 'utc',
+    }).setZone('UTC');
+    assert.equal(proposedTemplateStart.weekday, 2);
+    assert.equal(proposedTemplateStart.toFormat('HH:mm'), '18:00');
     const templateStart = future.plus({ days: 1 });
     const generatedPreview = await send(
       modal(`ride_draft_schedule:${templateDraftId}`, 'leader', ['ride-leader'], {
@@ -431,6 +455,10 @@ integration(
       }),
     );
     assert.match(generatedPreview.json().data.content, /Förhandsvisning/);
+    assert.match(
+      generatedPreview.json().data.embeds[0].description,
+      /Extra kommentar: Ta med vatten/,
+    );
     assert.equal(
       (
         await db.pool.query('SELECT COUNT(*)::int AS count FROM rides WHERE creation_draft_id=$1', [
@@ -460,8 +488,17 @@ integration(
     const copiedStored = await db.pool.query('SELECT * FROM ride_drafts WHERE id=$1', [
       copiedDraftId,
     ]);
-    assert.equal(copiedStored.rows[0].starts_at, null);
+    const copiedSource = await db.pool.query('SELECT starts_at FROM rides WHERE id=$1', [
+      copiedStored.rows[0].source_ride_id,
+    ]);
+    const expectedCopyStart = DateTime.fromJSDate(copiedSource.rows[0].starts_at, {
+      zone: 'utc',
+    })
+      .setZone('UTC')
+      .plus({ weeks: 1 });
+    assert.equal(new Date(copiedStored.rows[0].starts_at).toISOString(), expectedCopyStart.toISO());
     assert.equal(copiedStored.rows[0].zwift_url, null);
+    assert.equal(copiedStored.rows[0].notes, null);
     assert.equal(copiedStored.rows[0].published_ride_id, null);
     const cancelledDraft = await send(
       component(`ride_draft_cancel:${copiedDraftId}`, 'leader', ['ride-leader']),
@@ -560,6 +597,7 @@ integration(
         title: 'Nya tisdagsintervaller',
         duration: '75',
         ride_type: 'intervaller',
+        details: 'Veckotid: torsdag 18:30\nSnabbval: 2',
       }),
     );
     assert.match(editedTemplate.json().data.content, /har uppdaterats/);

@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { pool } from '../db/pool.js';
 import type { Ride } from './repository.js';
+import { nextWeeklyOccurrence, nextWeeklyRideStart } from './time.js';
 
 export type RideDraft = {
   id: string;
@@ -70,18 +71,31 @@ export async function createRideDraftFromTemplate(
   ownerDiscordId: string,
   templateId: string,
   channelId: string,
+  timezone: string,
+  now = new Date(),
 ): Promise<RideDraft | null> {
+  const template = await pool.query<{
+    default_weekday: number | null;
+    default_start_time: string | null;
+  }>(
+    `SELECT default_weekday, default_start_time
+     FROM ride_templates WHERE id=$1 AND active=TRUE`,
+    [templateId],
+  );
+  if (!template.rows[0]) return null;
+  const { default_weekday: weekday, default_start_time: time } = template.rows[0];
+  const startsAt = weekday && time ? nextWeeklyOccurrence(weekday, time, timezone, now) : null;
   const result = await pool.query<RideDraft>(
     `INSERT INTO ride_drafts(
        owner_discord_id, source_template_id, discord_channel_id, title, description,
-       ride_type, duration_minutes, route_world, pace_workout, notes
-     )
-     SELECT $1, id, $3, title, description, ride_type, duration_minutes,
-            route_world, pace_workout, notes
+       ride_type, starts_at, duration_minutes, route_world, pace_workout, notes
+      )
+      SELECT $1, id, $3, title, description, ride_type, $4, duration_minutes,
+             route_world, pace_workout, notes
      FROM ride_templates
      WHERE id=$2 AND active=TRUE
      RETURNING *`,
-    [ownerDiscordId, templateId, channelId],
+    [ownerDiscordId, templateId, channelId, startsAt],
   );
   return result.rows[0] ?? null;
 }
@@ -89,20 +103,31 @@ export async function createRideDraftFromTemplate(
 export async function createRideDraftFromLatestRide(
   ownerDiscordId: string,
   channelId: string,
+  timezone: string,
+  now = new Date(),
 ): Promise<RideDraft | null> {
+  const latest = await pool.query<{ id: string; starts_at: Date }>(
+    `SELECT id, starts_at FROM rides
+     WHERE creator_discord_id=$1
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [ownerDiscordId],
+  );
+  if (!latest.rows[0]) return null;
+  const startsAt = nextWeeklyRideStart(new Date(latest.rows[0].starts_at), timezone, now);
   const result = await pool.query<RideDraft>(
     `INSERT INTO ride_drafts(
        owner_discord_id, source_ride_id, discord_channel_id,
-       title, description, ride_type, duration_minutes, route_world, pace_workout, notes
-     )
-     SELECT $1, id, $2, title, description, ride_type, duration_minutes,
-            route_world, pace_workout, notes
-     FROM rides
-     WHERE creator_discord_id=$1
-     ORDER BY created_at DESC, id DESC
-     LIMIT 1
-     RETURNING *`,
-    [ownerDiscordId, channelId],
+       title, description, ride_type, starts_at, duration_minutes, route_world, pace_workout, notes
+      )
+      SELECT $1, r.id, $2, r.title, r.description, r.ride_type, $4, r.duration_minutes,
+             r.route_world, r.pace_workout,
+             CASE WHEN source_draft.id IS NOT NULL THEN source_draft.notes ELSE r.notes END
+      FROM rides r
+      LEFT JOIN ride_drafts source_draft ON source_draft.id=r.creation_draft_id
+      WHERE r.id=$3
+      RETURNING *`,
+    [ownerDiscordId, channelId, latest.rows[0].id, startsAt],
   );
   return result.rows[0] ?? null;
 }

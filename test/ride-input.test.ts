@@ -36,12 +36,40 @@ test('parses rich metadata and template fields', () => {
     duration: '75',
     ride_type: 'intervaller',
     details:
-      'Beskrivning: Fyra block\nRutt/värld: Watopia\nTempo/träning: 2,5 W/kg\nAnteckningar: Samling i röstkanalen',
+      'Veckotid: tisdag 18:00\nSnabbval: 2\nBeskrivning: Fyra block\nRutt/värld: Watopia\nTempo/träning: 2,5 W/kg\nAnteckningar: Samling i röstkanalen',
   });
   assert.equal(result.rideType, 'intervals');
   assert.equal(result.routeWorld, 'Watopia');
   assert.equal(result.paceWorkout, '2,5 W/kg');
   assert.equal(result.notes, 'Samling i röstkanalen');
+  assert.equal(result.defaultWeekday, 2);
+  assert.equal(result.defaultStartTime, '18:00');
+  assert.equal(result.quickCreate, true);
+  assert.equal(result.sortOrder, 2);
+});
+
+test('keeps template scheduling optional and validates its compact syntax', () => {
+  const result = parseTemplateFields({
+    name: 'Manuell mall',
+    title: 'Socialt pass',
+    duration: '60',
+    ride_type: 'social',
+  });
+
+  assert.equal(result.defaultWeekday, undefined);
+  assert.equal(result.defaultStartTime, undefined);
+  assert.equal(result.quickCreate, false);
+  assert.throws(
+    () =>
+      parseTemplateFields({
+        name: 'Felaktig mall',
+        title: 'Pass',
+        duration: '60',
+        ride_type: 'social',
+        details: 'Veckotid: ibland',
+      }),
+    /Veckotid/,
+  );
 });
 
 test('parses template ride time and validates its optional URL', () => {
