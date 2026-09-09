@@ -53,6 +53,9 @@ server can remain behind VPN/Tailscale.
 Commands, buttons and forms continue to use signed HTTP interactions. The optional Gateway client
 only receives member events used by automatic welcome messages.
 
+For the reproducible Azure production topology using Container Apps, private PostgreSQL, ACR, Key
+Vault, Bicep, and GitHub Actions OIDC, see [`docs/AZURE_DEPLOYMENT.md`](docs/AZURE_DEPLOYMENT.md).
+
 ## 1. Create the Discord application
 
 Follow [`docs/DISCORD_SETUP.md`](docs/DISCORD_SETUP.md).

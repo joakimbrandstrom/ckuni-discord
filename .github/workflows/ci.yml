@@ -42,6 +42,17 @@ jobs:
           docker compose config >/dev/null
           docker compose --profile quick-tunnel config >/dev/null
           docker compose --profile tunnel config >/dev/null
+      - name: Validate Bicep
+        env:
+          POSTGRES_ADMINISTRATOR_PASSWORD: Validation-only-9b3!test
+          DISCORD_APPLICATION_ID: validation-app
+          DISCORD_PUBLIC_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+          DISCORD_BOT_TOKEN: validation-token
+          DISCORD_GUILD_ID: validation-guild
+        run: |
+          az bicep install --version v0.47.16
+          az bicep build --file infra/main.bicep --stdout >/dev/null
+          az bicep build-params --file infra/prod.bicepparam --stdout >/dev/null
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24

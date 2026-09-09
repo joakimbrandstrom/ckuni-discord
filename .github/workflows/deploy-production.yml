@@ -1,0 +1,149 @@
+name: Deploy production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-ckuni-prod
+  IMAGE_REPOSITORY: ckuni-discord
+  CONTAINER_APP_NAME: ca-ckuni-discord
+  MIGRATION_JOB_NAME: caj-ckuni-migrate
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  deploy:
+    if: >-
+      ${{ github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      REGISTRY_NAME: ${{ vars.AZURE_CONTAINER_REGISTRY }}
+    steps:
+      - name: Check deployment configuration
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          : "${AZURE_CLIENT_ID:?Set AZURE_CLIENT_ID in the production environment}"
+          : "${AZURE_TENANT_ID:?Set AZURE_TENANT_ID in the production environment}"
+          : "${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID in the production environment}"
+          : "${REGISTRY_NAME:?Set AZURE_CONTAINER_REGISTRY in the production environment}"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.IMAGE_TAG }}
+          persist-credentials: false
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac # v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push image
+        env:
+          IMAGE: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_REPOSITORY }}:${{ env.IMAGE_TAG }}
+        run: |
+          set -euo pipefail
+          az acr login --name "$REGISTRY_NAME"
+          docker build --tag "$IMAGE" .
+          docker push "$IMAGE"
+
+          digest=$(az acr repository show \
+            --name "$REGISTRY_NAME" \
+            --image "$IMAGE_REPOSITORY:$IMAGE_TAG" \
+            --query digest \
+            --output tsv)
+          echo "DEPLOY_IMAGE=$REGISTRY_NAME.azurecr.io/$IMAGE_REPOSITORY@$digest" >> "$GITHUB_ENV"
+
+      - name: Run database migrations
+        run: |
+          set -euo pipefail
+          az containerapp job update \
+            --name "$MIGRATION_JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$DEPLOY_IMAGE" \
+            --output none
+
+          execution_name=$(az containerapp job start \
+            --name "$MIGRATION_JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query name \
+            --output tsv)
+
+          for _ in {1..60}; do
+            status=$(az containerapp job execution show \
+              --name "$MIGRATION_JOB_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --job-execution-name "$execution_name" \
+              --query properties.status \
+              --output tsv)
+
+            case "$status" in
+              Succeeded)
+                exit 0
+                ;;
+              Failed|Stopped|Degraded|Unknown)
+                echo "Migration execution $execution_name ended with status $status"
+                exit 1
+                ;;
+            esac
+
+            sleep 10
+          done
+
+          echo "Migration execution $execution_name timed out"
+          exit 1
+
+      - name: Deploy application revision
+        run: |
+          set -euo pipefail
+          revision_suffix="r-${IMAGE_TAG:0:8}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          expected_revision=$(az containerapp update \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$DEPLOY_IMAGE" \
+            --revision-suffix "$revision_suffix" \
+            --query properties.latestRevisionName \
+            --output tsv)
+
+          for _ in {1..60}; do
+            read -r latest_revision ready_revision < <(az containerapp show \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query '[properties.latestRevisionName, properties.latestReadyRevisionName]' \
+              --output tsv)
+
+            if [ "$latest_revision" = "$expected_revision" ] && [ "$ready_revision" = "$expected_revision" ]; then
+              fqdn=$(az containerapp show \
+                --name "$CONTAINER_APP_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --query properties.configuration.ingress.fqdn \
+                --output tsv)
+              curl --fail --silent --show-error "https://$fqdn/ready"
+              echo "Production is ready at https://$fqdn"
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo 'The new Container App revision did not become ready'
+          exit 1
