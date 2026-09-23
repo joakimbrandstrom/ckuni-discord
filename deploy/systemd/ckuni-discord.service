@@ -1,0 +1,14 @@
+[Unit]
+Description=CK UNI Discord Podman Compose stack
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/ckuni-discord
+ExecStart=/usr/bin/podman compose --profile tunnel up -d
+ExecStop=/usr/bin/podman compose --profile tunnel stop
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target
