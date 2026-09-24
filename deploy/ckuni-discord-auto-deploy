@@ -4,6 +4,7 @@ set -euo pipefail
 umask 077
 
 REPO="${CKUNI_REPO:-${HOME}/ckuni-discord}"
+COMPOSE_PROJECT="${CKUNI_COMPOSE_PROJECT:-$(basename "${REPO}")}"
 STATE_DIR="${CKUNI_STATE_DIR:-${HOME}/.local/state/ckuni-discord}"
 BACKUP_DIR="${CKUNI_BACKUP_DIR:-${STATE_DIR}/backups}"
 BACKUP_COMMAND="${CKUNI_BACKUP_COMMAND:-${HOME}/.local/libexec/ckuni-discord-backup-postgres}"
@@ -43,7 +44,12 @@ wait_for_tunnel() {
   local cloudflared_started_at
 
   for ((attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt += 1)); do
-    cloudflared_id="$("${COMPOSE[@]}" ps -q cloudflared)"
+    cloudflared_id="$(
+      podman ps \
+        --filter "label=io.podman.compose.project=${COMPOSE_PROJECT}" \
+        --filter 'label=io.podman.compose.service=cloudflared' \
+        --format '{{.ID}}'
+    )"
     if [[ -n "${cloudflared_id}" ]] && \
       [[ "$(podman inspect --format '{{.State.Running}}' "${cloudflared_id}")" == 'true' ]]; then
       cloudflared_started_at="$(

@@ -9,6 +9,7 @@ Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=CKUNI_REPO=%h/ckuni-discord
 EnvironmentFile=-%h/.config/ckuni-discord/deploy.env
 ExecStart=%h/.local/libexec/ckuni-discord-auto-deploy
+KillMode=process
 TimeoutStartSec=30min
 StandardOutput=journal
 StandardError=journal

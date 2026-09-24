@@ -97,7 +97,7 @@ elif [[ "$1" == 'logs' ]]; then
   if [[ "\${FAIL_TUNNEL:-0}" != '1' ]]; then
     printf 'Registered tunnel connection\\n'
   fi
-elif [[ "$*" == *'ps -q cloudflared'* ]]; then
+elif [[ "$*" == *'io.podman.compose.service=cloudflared'* ]]; then
   printf 'cloudflared-id\\n'
 fi
 `,
@@ -173,6 +173,7 @@ test('backs up, fast-forwards, validates, and records a deployment', (t) => {
   assert.match(commands, /run --rm bot node dist\/src\/discord\/register-commands\.js/);
   assert.ok(commands.indexOf('backup') < commands.indexOf('stop bot'));
   assert.ok(commands.indexOf('stop bot') < commands.indexOf('up -d --build'));
+  assert.match(commands, /io\.podman\.compose\.service=cloudflared/);
   assert.match(commands, /podman logs --since .* --tail 200 cloudflared-id/);
 });
 

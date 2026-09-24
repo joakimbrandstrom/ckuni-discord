@@ -183,6 +183,10 @@ backup completes, the old bot is stopped before the checkout changes or migratio
 successful commit is recorded only after all checks pass, so a failed deployment is retried on the
 next timer activation.
 
+The deployment service uses `KillMode=process` so rootless Podman containers remain running after
+the short-lived deployment process exits. The containers continue to be managed by the separate
+`ckuni-discord.service` at boot and shutdown.
+
 By default, state and backups are stored outside the Git checkout:
 
 ```text
