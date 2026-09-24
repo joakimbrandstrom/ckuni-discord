@@ -1,7 +1,7 @@
 [Unit]
 Description=Deploy CK UNI Discord from origin/main
-After=network-online.target ckuni-discord.service
-Wants=network-online.target ckuni-discord.service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot

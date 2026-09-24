@@ -70,6 +70,13 @@ fi
 [[ -d "${REPO}/.git" ]] || fail "repository not found at ${REPO}"
 [[ -x "${BACKUP_COMMAND}" ]] || fail "backup command is not executable: ${BACKUP_COMMAND}"
 [[ -n "${PUBLIC_READY_URL}" ]] || fail 'CKUNI_PUBLIC_READY_URL is required'
+[[ "${PUBLIC_READY_URL}" == https://* ]] || fail 'CKUNI_PUBLIC_READY_URL must use HTTPS'
+
+service_repo="$(
+  systemctl --user show ckuni-discord.service --property=WorkingDirectory --value
+)"
+[[ "${service_repo}" == "${REPO}" ]] || \
+  fail "ckuni-discord.service uses ${service_repo}, expected ${REPO}"
 cd "${REPO}"
 
 branch="$(git symbolic-ref --quiet --short HEAD)" || fail 'repository is not on a branch'

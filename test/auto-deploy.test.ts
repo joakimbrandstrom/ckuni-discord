@@ -119,6 +119,9 @@ fi
     `#!/usr/bin/env bash
 set -euo pipefail
 printf 'systemctl %s\\n' "$*" >> "\${TEST_LOG}"
+if [[ "$*" == *'show ckuni-discord.service'* ]]; then
+  printf '%s\\n' "\${CKUNI_REPO}"
+fi
 `,
   );
   chmodSync(join(fakeBin, 'podman'), 0o755);
@@ -167,7 +170,7 @@ test('does nothing when origin/main is already deployed', (t) => {
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /already deployed/);
-  assert.equal(readFileSync(fixture.logFile, 'utf8'), '');
+  assert.doesNotMatch(readFileSync(fixture.logFile, 'utf8'), /backup|podman/);
 });
 
 test('backs up, fast-forwards, validates, and records a deployment', (t) => {
@@ -220,7 +223,17 @@ test('refuses to deploy from a dirty checkout', (t) => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /uncommitted or untracked files/);
-  assert.equal(readFileSync(fixture.logFile, 'utf8'), '');
+  assert.doesNotMatch(readFileSync(fixture.logFile, 'utf8'), /backup|podman/);
+});
+
+test('requires a public HTTPS readiness URL', (t) => {
+  const fixture = createFixture();
+  t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+
+  const result = deploy(fixture, { CKUNI_PUBLIC_READY_URL: 'http://bot.example/ready' });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /must use HTTPS/);
 });
 
 test('does not record deployment when the public tunnel is not ready', (t) => {

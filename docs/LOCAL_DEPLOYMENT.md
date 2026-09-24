@@ -194,10 +194,10 @@ By default, state and backups are stored outside the Git checkout:
 ~/.local/state/ckuni-discord/backups/
 ```
 
-Override non-secret paths by creating `~/.config/ckuni-discord/deploy.env` with absolute paths:
+Set the public readiness URL and optionally override non-secret state or backup paths by creating
+`~/.config/ckuni-discord/deploy.env`:
 
 ```dotenv
-CKUNI_REPO=/home/example/ckuni-discord
 CKUNI_STATE_DIR=/home/example/.local/state/ckuni-discord
 CKUNI_BACKUP_DIR=/mnt/backups/ckuni-discord
 CKUNI_PUBLIC_READY_URL=https://bot.example.com/ready
@@ -206,6 +206,10 @@ CKUNI_PUBLIC_READY_URL=https://bot.example.com/ready
 `CKUNI_PUBLIC_READY_URL` is required. It must use the public Cloudflare hostname so a successful
 deployment proves that the tunnel reaches the ready application, not only that the local container
 is running.
+
+The deployer verifies that its checkout matches the `WorkingDirectory` configured in
+`ckuni-discord.service`. If the clone is not at `~/ckuni-discord`, update the boot service and the
+`CKUNI_REPO` value in `ckuni-discord-deploy.service` together before installing them.
 
 Do not put Discord, PostgreSQL or Cloudflare credentials in this file. They remain in the
 deployment checkout's ignored `.env` file.
