@@ -244,7 +244,7 @@ test('does not record deployment when the public tunnel is not ready', (t) => {
   const result = deploy(fixture, { FAIL_TUNNEL: '1' });
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /did not register a tunnel connection/);
+  assert.match(result.stderr, /did not serve public \/ready/);
   assert.equal(run('git', ['rev-parse', 'HEAD'], fixture.repo), targetSha);
   assert.equal(
     readFileSync(join(fixture.stateDir, 'deployed-sha'), 'utf8').trim(),

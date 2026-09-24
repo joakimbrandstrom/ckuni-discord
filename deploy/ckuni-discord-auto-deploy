@@ -57,7 +57,7 @@ wait_for_tunnel() {
     sleep "${HEALTH_INTERVAL_SECONDS}"
   done
 
-  fail 'cloudflared did not register a tunnel connection'
+  fail 'Cloudflare tunnel did not serve public /ready'
 }
 
 mkdir -p "${STATE_DIR}" "${BACKUP_DIR}"

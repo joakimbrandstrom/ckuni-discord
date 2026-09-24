@@ -160,7 +160,14 @@ The included user-level systemd timer can poll `origin/main` without exposing SS
 the internet. A deployment runs only from a clean `main` checkout and only accepts fast-forward
 updates. Before updating the checkout, it creates and validates a private PostgreSQL backup.
 
-Install the deployment driver and timer:
+Configure the public health-check URL before starting the timer. Create
+`~/.config/ckuni-discord/deploy.env` with your Cloudflare hostname:
+
+```dotenv
+CKUNI_PUBLIC_READY_URL=https://bot.example.com/ready
+```
+
+Install the deployment driver and timer from the deployment checkout:
 
 ```bash
 mkdir -p ~/.local/libexec ~/.config/systemd/user
@@ -194,13 +201,11 @@ By default, state and backups are stored outside the Git checkout:
 ~/.local/state/ckuni-discord/backups/
 ```
 
-Set the public readiness URL and optionally override non-secret state or backup paths by creating
-`~/.config/ckuni-discord/deploy.env`:
+Optionally add absolute state or backup paths to `~/.config/ckuni-discord/deploy.env`:
 
 ```dotenv
 CKUNI_STATE_DIR=/home/example/.local/state/ckuni-discord
 CKUNI_BACKUP_DIR=/mnt/backups/ckuni-discord
-CKUNI_PUBLIC_READY_URL=https://bot.example.com/ready
 ```
 
 `CKUNI_PUBLIC_READY_URL` is required. It must use the public Cloudflare hostname so a successful
