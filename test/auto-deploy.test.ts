@@ -105,7 +105,11 @@ fi
   writeFileSync(
     join(fakeBin, 'curl'),
     `#!/usr/bin/env bash
+printf 'curl %s\\n' "$*" >> "\${TEST_LOG}"
 if [[ "\${FAIL_HEALTH:-0}" == '1' ]]; then
+  exit 22
+fi
+if [[ "\${FAIL_TUNNEL:-0}" == '1' && "$*" == *'bot.example'* ]]; then
   exit 22
 fi
 `,
@@ -138,6 +142,7 @@ function deploy(fixture: Fixture, extraEnv: NodeJS.ProcessEnv = {}) {
       CKUNI_STATE_DIR: fixture.stateDir,
       CKUNI_BACKUP_DIR: fixture.backupDir,
       CKUNI_BACKUP_COMMAND: join(fixture.repo, 'backup-postgres.sh'),
+      CKUNI_PUBLIC_READY_URL: 'https://bot.example/ready',
       CKUNI_HEALTH_ATTEMPTS: '1',
       CKUNI_HEALTH_INTERVAL_SECONDS: '0',
       TEST_LOG: fixture.logFile,
@@ -174,7 +179,7 @@ test('backs up, fast-forwards, validates, and records a deployment', (t) => {
   assert.ok(commands.indexOf('backup') < commands.indexOf('stop bot'));
   assert.ok(commands.indexOf('stop bot') < commands.indexOf('up -d --build'));
   assert.match(commands, /io\.podman\.compose\.service=cloudflared/);
-  assert.match(commands, /podman logs --since .* --tail 200 cloudflared-id/);
+  assert.match(commands, /curl .*https:\/\/bot\.example\/ready/);
 });
 
 test('retries a failed deployment even after the checkout was updated', (t) => {
@@ -208,7 +213,7 @@ test('refuses to deploy from a dirty checkout', (t) => {
   assert.equal(readFileSync(fixture.logFile, 'utf8'), '');
 });
 
-test('does not record deployment without a registration from the current tunnel start', (t) => {
+test('does not record deployment when the public tunnel is not ready', (t) => {
   const fixture = createFixture();
   t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
   const targetSha = advanceOrigin(fixture);

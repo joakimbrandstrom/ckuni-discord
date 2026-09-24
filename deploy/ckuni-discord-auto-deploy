@@ -8,6 +8,7 @@ COMPOSE_PROJECT="${CKUNI_COMPOSE_PROJECT:-$(basename "${REPO}")}"
 STATE_DIR="${CKUNI_STATE_DIR:-${HOME}/.local/state/ckuni-discord}"
 BACKUP_DIR="${CKUNI_BACKUP_DIR:-${STATE_DIR}/backups}"
 BACKUP_COMMAND="${CKUNI_BACKUP_COMMAND:-${HOME}/.local/libexec/ckuni-discord-backup-postgres}"
+PUBLIC_READY_URL="${CKUNI_PUBLIC_READY_URL:-}"
 HEALTH_ATTEMPTS="${CKUNI_HEALTH_ATTEMPTS:-30}"
 HEALTH_INTERVAL_SECONDS="${CKUNI_HEALTH_INTERVAL_SECONDS:-2}"
 MARKER_FILE="${STATE_DIR}/deployed-sha"
@@ -40,8 +41,6 @@ wait_for_endpoint() {
 wait_for_tunnel() {
   local attempt
   local cloudflared_id
-  local cloudflared_logs
-  local cloudflared_started_at
 
   for ((attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt += 1)); do
     cloudflared_id="$(
@@ -51,16 +50,9 @@ wait_for_tunnel() {
         --format '{{.ID}}'
     )"
     if [[ -n "${cloudflared_id}" ]] && \
-      [[ "$(podman inspect --format '{{.State.Running}}' "${cloudflared_id}")" == 'true' ]]; then
-      cloudflared_started_at="$(
-        podman inspect --format '{{.State.StartedAt}}' "${cloudflared_id}"
-      )"
-      cloudflared_logs="$(
-        podman logs --since "${cloudflared_started_at}" --tail 200 "${cloudflared_id}" 2>&1
-      )" || true
-      if [[ "${cloudflared_logs}" == *'Registered tunnel connection'* ]]; then
-        return 0
-      fi
+      [[ "$(podman inspect --format '{{.State.Running}}' "${cloudflared_id}")" == 'true' ]] && \
+      curl --fail --silent --max-time 10 "${PUBLIC_READY_URL}" > /dev/null 2>&1; then
+      return 0
     fi
     sleep "${HEALTH_INTERVAL_SECONDS}"
   done
@@ -77,6 +69,7 @@ fi
 
 [[ -d "${REPO}/.git" ]] || fail "repository not found at ${REPO}"
 [[ -x "${BACKUP_COMMAND}" ]] || fail "backup command is not executable: ${BACKUP_COMMAND}"
+[[ -n "${PUBLIC_READY_URL}" ]] || fail 'CKUNI_PUBLIC_READY_URL is required'
 cd "${REPO}"
 
 branch="$(git symbolic-ref --quiet --short HEAD)" || fail 'repository is not on a branch'
