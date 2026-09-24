@@ -166,6 +166,8 @@ Install the deployment driver and timer:
 mkdir -p ~/.local/libexec ~/.config/systemd/user
 install -m755 deploy/ckuni-discord-auto-deploy \
   ~/.local/libexec/ckuni-discord-auto-deploy
+install -m755 backup-postgres.sh \
+  ~/.local/libexec/ckuni-discord-backup-postgres
 install -m644 deploy/systemd/ckuni-discord-deploy.service \
   deploy/systemd/ckuni-discord-deploy.timer \
   ~/.config/systemd/user/
@@ -219,9 +221,9 @@ Backups are not deleted automatically; monitor disk usage and apply an appropria
 Because merged code and migrations execute on the server, protect `main` and require reviewed pull
 requests.
 
-The driver and unit files are copied outside the checkout so they cannot change while a deployment
-is running. If a later release changes files under `deploy/`, rerun the installation commands above
-to update those installed copies.
+The driver, backup helper and unit files are copied outside the checkout so they cannot change while
+a deployment is running. If a later release changes those files, rerun the installation commands
+above to update the installed copies.
 
 ## Inspect
 

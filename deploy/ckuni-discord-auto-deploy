@@ -6,6 +6,7 @@ umask 077
 REPO="${CKUNI_REPO:-${HOME}/ckuni-discord}"
 STATE_DIR="${CKUNI_STATE_DIR:-${HOME}/.local/state/ckuni-discord}"
 BACKUP_DIR="${CKUNI_BACKUP_DIR:-${STATE_DIR}/backups}"
+BACKUP_COMMAND="${CKUNI_BACKUP_COMMAND:-${HOME}/.local/libexec/ckuni-discord-backup-postgres}"
 HEALTH_ATTEMPTS="${CKUNI_HEALTH_ATTEMPTS:-30}"
 HEALTH_INTERVAL_SECONDS="${CKUNI_HEALTH_INTERVAL_SECONDS:-2}"
 MARKER_FILE="${STATE_DIR}/deployed-sha"
@@ -69,6 +70,7 @@ if ! flock -n 9; then
 fi
 
 [[ -d "${REPO}/.git" ]] || fail "repository not found at ${REPO}"
+[[ -x "${BACKUP_COMMAND}" ]] || fail "backup command is not executable: ${BACKUP_COMMAND}"
 cd "${REPO}"
 
 branch="$(git symbolic-ref --quiet --short HEAD)" || fail 'repository is not on a branch'
@@ -105,7 +107,7 @@ if [[ "${current_sha}" != "${target_sha}" ]]; then
 fi
 
 log 'creating PostgreSQL backup'
-"${REPO}/backup-postgres.sh" "${BACKUP_DIR}"
+CKUNI_REPO="${REPO}" "${BACKUP_COMMAND}" "${BACKUP_DIR}"
 
 log 'stopping the bot before migrations'
 "${COMPOSE[@]}" stop bot

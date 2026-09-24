@@ -137,6 +137,7 @@ function deploy(fixture: Fixture, extraEnv: NodeJS.ProcessEnv = {}) {
       CKUNI_REPO: fixture.repo,
       CKUNI_STATE_DIR: fixture.stateDir,
       CKUNI_BACKUP_DIR: fixture.backupDir,
+      CKUNI_BACKUP_COMMAND: join(fixture.repo, 'backup-postgres.sh'),
       CKUNI_HEALTH_ATTEMPTS: '1',
       CKUNI_HEALTH_INTERVAL_SECONDS: '0',
       TEST_LOG: fixture.logFile,
@@ -243,7 +244,11 @@ fi
 
   const result = spawnSync('bash', [backupScript, backupDir], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}` },
+    env: {
+      ...process.env,
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      CKUNI_REPO: resolve('.'),
+    },
   });
 
   assert.equal(result.status, 0, result.stderr);
@@ -274,7 +279,11 @@ fi
 
   const result = spawnSync('bash', [backupScript, backupDir], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}` },
+    env: {
+      ...process.env,
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      CKUNI_REPO: resolve('.'),
+    },
   });
 
   assert.notEqual(result.status, 0);

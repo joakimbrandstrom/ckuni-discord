@@ -21,7 +21,8 @@ set -euo pipefail
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_DIR="${1:-${SCRIPT_DIR}/backups}"
+REPO="${CKUNI_REPO:-${SCRIPT_DIR}}"
+BACKUP_DIR="${1:-${REPO}/backups}"
 
 TIMESTAMP="$(date -u +%Y%m%d_%H%M%S)"
 DUMP_FILE="${BACKUP_DIR}/ckuni_${TIMESTAMP}_${BASHPID}.dump"
@@ -37,7 +38,7 @@ trap cleanup EXIT
 
 mkdir -p "${BACKUP_DIR}"
 TEMP_DUMP="$(mktemp "${BACKUP_DIR}/.ckuni_${TIMESTAMP}.XXXXXX.tmp")"
-cd "${SCRIPT_DIR}"
+cd "${REPO}"
 
 printf 'Backing up CK UNI PostgreSQL to %s\n' "${DUMP_FILE}"
 
