@@ -86,7 +86,7 @@ printf 'archive\\n' > "$1/test.dump"
     `#!/usr/bin/env bash
 set -euo pipefail
 printf 'podman %s\\n' "$*" >> "\${TEST_LOG}"
-if [[ "\${FAIL_UP:-0}" == '1' && "$*" == *'up -d --build'* ]]; then
+if [[ "\${FAIL_UP:-0}" == '1' && "$*" == *' build'* ]]; then
   exit 23
 fi
 if [[ "$*" == *'State.StartedAt'* ]]; then
@@ -114,8 +114,16 @@ if [[ "\${FAIL_TUNNEL:-0}" == '1' && "$*" == *'bot.example'* ]]; then
 fi
 `,
   );
+  writeFileSync(
+    join(fakeBin, 'systemctl'),
+    `#!/usr/bin/env bash
+set -euo pipefail
+printf 'systemctl %s\\n' "$*" >> "\${TEST_LOG}"
+`,
+  );
   chmodSync(join(fakeBin, 'podman'), 0o755);
   chmodSync(join(fakeBin, 'curl'), 0o755);
+  chmodSync(join(fakeBin, 'systemctl'), 0o755);
 
   const initialSha = run('git', ['rev-parse', 'HEAD'], repo);
   writeFileSync(join(stateDir, 'deployed-sha'), `${initialSha}\n`);
@@ -174,10 +182,12 @@ test('backs up, fast-forwards, validates, and records a deployment', (t) => {
   assert.equal(readFileSync(join(fixture.stateDir, 'deployed-sha'), 'utf8').trim(), targetSha);
   const commands = readFileSync(fixture.logFile, 'utf8');
   assert.match(commands, /backup/);
-  assert.match(commands, /up -d --build/);
+  assert.match(commands, /podman compose --profile tunnel build/);
+  assert.match(commands, /systemctl --user restart ckuni-discord\.service/);
   assert.match(commands, /run --rm bot node dist\/src\/discord\/register-commands\.js/);
   assert.ok(commands.indexOf('backup') < commands.indexOf('stop bot'));
-  assert.ok(commands.indexOf('stop bot') < commands.indexOf('up -d --build'));
+  assert.ok(commands.indexOf('stop bot') < commands.indexOf(' build'));
+  assert.ok(commands.indexOf(' build') < commands.indexOf('systemctl --user restart'));
   assert.match(commands, /io\.podman\.compose\.service=cloudflared/);
   assert.match(commands, /curl .*https:\/\/bot\.example\/ready/);
 });

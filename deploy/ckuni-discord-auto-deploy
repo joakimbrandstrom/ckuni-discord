@@ -116,8 +116,11 @@ if [[ "${current_sha}" != "${target_sha}" ]]; then
   git merge --ff-only --no-edit "${target_sha}"
 fi
 
-log 'building and starting the tunnel profile'
-"${COMPOSE[@]}" up -d --build
+log 'building application images'
+"${COMPOSE[@]}" build
+
+log 'restarting the Compose stack through ckuni-discord.service'
+systemctl --user restart ckuni-discord.service
 
 log 'waiting for /health'
 wait_for_endpoint '/health'
