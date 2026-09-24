@@ -6,3 +6,4 @@ dist/
 coverage/
 reports/
 .stryker-tmp/
+/backups/

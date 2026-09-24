@@ -154,6 +154,95 @@ journalctl --user -u ckuni-discord.service -b
 The PostgreSQL data remains persistent across container and host restarts because it is stored in the
 named `postgres_data` volume.
 
+## Deploy new commits from `main` automatically
+
+The included user-level systemd timer can poll `origin/main` without exposing SSH or a webhook to
+the internet. A deployment runs only from a clean `main` checkout and only accepts fast-forward
+updates. Before updating the checkout, it creates and validates a private PostgreSQL backup.
+
+Configure the public health-check URL before starting the timer. Create
+`~/.config/ckuni-discord/deploy.env` with your Cloudflare hostname:
+
+```dotenv
+CKUNI_PUBLIC_READY_URL=https://bot.example.com/ready
+```
+
+Install the deployment driver and timer from the deployment checkout:
+
+```bash
+mkdir -p ~/.local/libexec ~/.config/systemd/user
+install -m755 deploy/ckuni-discord-auto-deploy \
+  ~/.local/libexec/ckuni-discord-auto-deploy
+install -m755 backup-postgres.sh \
+  ~/.local/libexec/ckuni-discord-backup-postgres
+install -m644 deploy/systemd/ckuni-discord-deploy.service \
+  deploy/systemd/ckuni-discord-deploy.timer \
+  ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now ckuni-discord-deploy.timer
+systemctl --user start ckuni-discord-deploy.service
+```
+
+The timer checks for updates about every two minutes. Each new target commit is deployed with the
+permanent tunnel profile, database migrations, a production image rebuild, local health and
+readiness checks, a registered Cloudflare connection, and Discord command registration. After the
+backup completes, the old bot is stopped before the checkout changes or migrations run. The
+successful commit is recorded only after all checks pass, so a failed deployment is retried on the
+next timer activation.
+
+The deployment service builds the application images and then restarts `ckuni-discord.service`.
+That existing boot service remains the single owner of the rootless Podman containers during
+startup, shutdown and automatic deployments.
+
+By default, state and backups are stored outside the Git checkout:
+
+```text
+~/.local/state/ckuni-discord/deployed-sha
+~/.local/state/ckuni-discord/backups/
+```
+
+Optionally add absolute state or backup paths to `~/.config/ckuni-discord/deploy.env`:
+
+```dotenv
+CKUNI_STATE_DIR=/home/example/.local/state/ckuni-discord
+CKUNI_BACKUP_DIR=/mnt/backups/ckuni-discord
+```
+
+`CKUNI_PUBLIC_READY_URL` is required. It must use the public Cloudflare hostname so a successful
+deployment proves that the tunnel reaches the ready application, not only that the local container
+is running.
+
+The deployer verifies that its checkout matches the `WorkingDirectory` configured in
+`ckuni-discord.service`. If the clone is not at `~/ckuni-discord`, update the boot service and the
+`CKUNI_REPO` value in `ckuni-discord-deploy.service` together before installing them.
+
+Do not put Discord, PostgreSQL or Cloudflare credentials in this file. They remain in the
+deployment checkout's ignored `.env` file.
+
+Inspect automatic deployments with:
+
+```bash
+systemctl --user status ckuni-discord-deploy.timer
+systemctl --user status ckuni-discord-deploy.service
+journalctl --user -u ckuni-discord-deploy.service
+```
+
+Stop the timer before planned maintenance:
+
+```bash
+systemctl --user disable --now ckuni-discord-deploy.timer
+```
+
+The updater deliberately does not reset, rebase, merge divergent history or roll back failed
+database migrations. It stops on a dirty checkout or divergent `main` branch for operator review.
+Backups are not deleted automatically; monitor disk usage and apply an appropriate retention policy.
+Because merged code and migrations execute on the server, protect `main` and require reviewed pull
+requests.
+
+The driver, backup helper and unit files are copied outside the checkout so they cannot change while
+a deployment is running. If a later release changes those files, rerun the installation commands
+above to update the installed copies.
+
 ## Inspect
 
 ```bash

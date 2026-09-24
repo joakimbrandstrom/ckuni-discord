@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll origin/main for CK UNI Discord deployments
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+AccuracySec=15s
+RandomizedDelaySec=15s
+Unit=ckuni-discord-deploy.service
+
+[Install]
+WantedBy=timers.target

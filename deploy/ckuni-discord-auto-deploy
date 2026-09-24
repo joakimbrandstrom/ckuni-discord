@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+umask 077
+
+REPO="${CKUNI_REPO:-${HOME}/ckuni-discord}"
+COMPOSE_PROJECT="${CKUNI_COMPOSE_PROJECT:-$(basename "${REPO}")}"
+STATE_DIR="${CKUNI_STATE_DIR:-${HOME}/.local/state/ckuni-discord}"
+BACKUP_DIR="${CKUNI_BACKUP_DIR:-${STATE_DIR}/backups}"
+BACKUP_COMMAND="${CKUNI_BACKUP_COMMAND:-${HOME}/.local/libexec/ckuni-discord-backup-postgres}"
+PUBLIC_READY_URL="${CKUNI_PUBLIC_READY_URL:-}"
+HEALTH_ATTEMPTS="${CKUNI_HEALTH_ATTEMPTS:-30}"
+HEALTH_INTERVAL_SECONDS="${CKUNI_HEALTH_INTERVAL_SECONDS:-2}"
+MARKER_FILE="${STATE_DIR}/deployed-sha"
+LOCK_FILE="${STATE_DIR}/deploy.lock"
+COMPOSE=(podman compose --profile tunnel)
+
+log() {
+  printf 'deploy: %s\n' "$*"
+}
+
+fail() {
+  log "ERROR: $*" >&2
+  exit 1
+}
+
+wait_for_endpoint() {
+  local endpoint="$1"
+  local attempt
+
+  for ((attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt += 1)); do
+    if curl --fail --silent --max-time 5 "http://127.0.0.1:3000${endpoint}" > /dev/null 2>&1; then
+      return 0
+    fi
+    sleep "${HEALTH_INTERVAL_SECONDS}"
+  done
+
+  fail "${endpoint} did not become ready after ${HEALTH_ATTEMPTS} attempts"
+}
+
+wait_for_tunnel() {
+  local attempt
+  local cloudflared_id
+
+  for ((attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt += 1)); do
+    cloudflared_id="$(
+      podman ps \
+        --filter "label=io.podman.compose.project=${COMPOSE_PROJECT}" \
+        --filter 'label=io.podman.compose.service=cloudflared' \
+        --format '{{.ID}}'
+    )"
+    if [[ -n "${cloudflared_id}" ]] && \
+      [[ "$(podman inspect --format '{{.State.Running}}' "${cloudflared_id}")" == 'true' ]] && \
+      curl --fail --silent --max-time 10 "${PUBLIC_READY_URL}" > /dev/null 2>&1; then
+      return 0
+    fi
+    sleep "${HEALTH_INTERVAL_SECONDS}"
+  done
+
+  fail 'Cloudflare tunnel did not serve public /ready'
+}
+
+mkdir -p "${STATE_DIR}" "${BACKUP_DIR}"
+exec 9> "${LOCK_FILE}"
+if ! flock -n 9; then
+  log 'another deployment is already running'
+  exit 0
+fi
+
+[[ -d "${REPO}/.git" ]] || fail "repository not found at ${REPO}"
+[[ -x "${BACKUP_COMMAND}" ]] || fail "backup command is not executable: ${BACKUP_COMMAND}"
+[[ -n "${PUBLIC_READY_URL}" ]] || fail 'CKUNI_PUBLIC_READY_URL is required'
+[[ "${PUBLIC_READY_URL}" == https://* ]] || fail 'CKUNI_PUBLIC_READY_URL must use HTTPS'
+
+service_repo="$(
+  systemctl --user show ckuni-discord.service --property=WorkingDirectory --value
+)"
+[[ "${service_repo}" == "${REPO}" ]] || \
+  fail "ckuni-discord.service uses ${service_repo}, expected ${REPO}"
+cd "${REPO}"
+
+branch="$(git symbolic-ref --quiet --short HEAD)" || fail 'repository is not on a branch'
+[[ "${branch}" == 'main' ]] || fail "expected branch main, found ${branch}"
+
+if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+  fail 'repository has uncommitted or untracked files'
+fi
+
+log 'fetching origin/main'
+GIT_TERMINAL_PROMPT=0 git fetch --no-tags origin \
+  refs/heads/main:refs/remotes/origin/main
+
+current_sha="$(git rev-parse HEAD)"
+target_sha="$(git rev-parse 'refs/remotes/origin/main^{commit}')"
+deployed_sha=''
+if [[ -f "${MARKER_FILE}" ]]; then
+  IFS= read -r deployed_sha < "${MARKER_FILE}" || true
+fi
+
+log "current=${current_sha} target=${target_sha} deployed=${deployed_sha:-none}"
+if [[ "${current_sha}" == "${target_sha}" && "${deployed_sha}" == "${target_sha}" ]]; then
+  log 'already deployed'
+  exit 0
+fi
+
+if [[ "${current_sha}" != "${target_sha}" ]]; then
+  if git merge-base --is-ancestor "${target_sha}" "${current_sha}"; then
+    fail 'local main contains commits not present on origin/main'
+  fi
+  if ! git merge-base --is-ancestor "${current_sha}" "${target_sha}"; then
+    fail 'local main and origin/main have diverged'
+  fi
+fi
+
+log 'creating PostgreSQL backup'
+CKUNI_REPO="${REPO}" "${BACKUP_COMMAND}" "${BACKUP_DIR}"
+
+log 'stopping the bot before migrations'
+"${COMPOSE[@]}" stop bot
+
+if [[ "${current_sha}" != "${target_sha}" ]]; then
+  log 'fast-forwarding checkout'
+  git merge --ff-only --no-edit "${target_sha}"
+fi
+
+log 'building application images'
+"${COMPOSE[@]}" build
+
+log 'restarting the Compose stack through ckuni-discord.service'
+systemctl --user restart ckuni-discord.service
+
+log 'waiting for /health'
+wait_for_endpoint '/health'
+log 'waiting for /ready'
+wait_for_endpoint '/ready'
+
+log 'waiting for the Cloudflare tunnel'
+wait_for_tunnel
+
+log 'registering Discord commands'
+"${COMPOSE[@]}" run --rm bot node dist/src/discord/register-commands.js
+
+marker_temp="$(mktemp "${STATE_DIR}/.deployed-sha.XXXXXX")"
+printf '%s\n' "${target_sha}" > "${marker_temp}"
+mv "${marker_temp}" "${MARKER_FILE}"
+log "deployment ${target_sha} successful"
