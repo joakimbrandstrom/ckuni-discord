@@ -91,6 +91,69 @@ podman compose --profile tunnel up -d --build
 
 See [`CLOUDFLARE_TUNNEL.md`](CLOUDFLARE_TUNNEL.md) for the full setup and troubleshooting guide.
 
+## Start automatically after a server reboot
+
+The long-running services already use `restart: unless-stopped` in `compose.yaml`. Keep the
+`migrate` service at `restart: "no"`: it is a one-shot dependency that should complete before the
+bot starts, not a daemon.
+
+For a rootless Podman deployment, use the included user-level systemd unit so the complete Compose
+project is started at boot:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/systemd/ckuni-discord.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now ckuni-discord.service
+```
+
+The included unit assumes the repository is cloned to:
+
+```text
+~/ckuni-discord
+```
+
+If the repository is elsewhere, edit `WorkingDirectory=` in
+`~/.config/systemd/user/ckuni-discord.service` before enabling it.
+
+Rootless user services normally start when the user logs in. Enable systemd lingering so the CK UNI
+service starts during boot and continues to run without an interactive login:
+
+```bash
+sudo loginctl enable-linger "$USER"
+```
+
+Verify the configuration:
+
+```bash
+systemctl --user is-enabled ckuni-discord.service
+systemctl --user status ckuni-discord.service
+loginctl show-user "$USER" -p Linger
+podman compose --profile tunnel ps
+```
+
+Expected values include `enabled` and `Linger=yes`.
+
+The unit starts the permanent tunnel profile with:
+
+```bash
+podman compose --profile tunnel up -d
+```
+
+and uses `podman compose --profile tunnel stop` during a clean systemd shutdown. Using `stop`
+keeps the Compose containers and networks defined instead of removing them with `down`.
+
+Test the complete boot path with a server reboot. After reconnecting:
+
+```bash
+systemctl --user status ckuni-discord.service
+podman compose --profile tunnel ps
+journalctl --user -u ckuni-discord.service -b
+```
+
+The PostgreSQL data remains persistent across container and host restarts because it is stored in the
+named `postgres_data` volume.
+
 ## Inspect
 
 ```bash
