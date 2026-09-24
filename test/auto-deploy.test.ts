@@ -89,10 +89,14 @@ printf 'podman %s\\n' "$*" >> "\${TEST_LOG}"
 if [[ "\${FAIL_UP:-0}" == '1' && "$*" == *'up -d --build'* ]]; then
   exit 23
 fi
-if [[ "$1" == 'inspect' ]]; then
+if [[ "$*" == *'State.StartedAt'* ]]; then
+  printf '2026-09-24T08:45:14.000000000+02:00\\n'
+elif [[ "$1" == 'inspect' ]]; then
   printf 'true\\n'
 elif [[ "$1" == 'logs' ]]; then
-  printf 'Registered tunnel connection\\n'
+  if [[ "\${FAIL_TUNNEL:-0}" != '1' ]]; then
+    printf 'Registered tunnel connection\\n'
+  fi
 elif [[ "$*" == *'ps -q cloudflared'* ]]; then
   printf 'cloudflared-id\\n'
 fi
@@ -168,7 +172,7 @@ test('backs up, fast-forwards, validates, and records a deployment', (t) => {
   assert.match(commands, /run --rm bot node dist\/src\/discord\/register-commands\.js/);
   assert.ok(commands.indexOf('backup') < commands.indexOf('stop bot'));
   assert.ok(commands.indexOf('stop bot') < commands.indexOf('up -d --build'));
-  assert.match(commands, /podman logs --tail 200 cloudflared-id/);
+  assert.match(commands, /podman logs --since .* --tail 200 cloudflared-id/);
 });
 
 test('retries a failed deployment even after the checkout was updated', (t) => {
@@ -200,6 +204,22 @@ test('refuses to deploy from a dirty checkout', (t) => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /uncommitted or untracked files/);
   assert.equal(readFileSync(fixture.logFile, 'utf8'), '');
+});
+
+test('does not record deployment without a registration from the current tunnel start', (t) => {
+  const fixture = createFixture();
+  t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  const targetSha = advanceOrigin(fixture);
+
+  const result = deploy(fixture, { FAIL_TUNNEL: '1' });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /did not register a tunnel connection/);
+  assert.equal(run('git', ['rev-parse', 'HEAD'], fixture.repo), targetSha);
+  assert.equal(
+    readFileSync(join(fixture.stateDir, 'deployed-sha'), 'utf8').trim(),
+    fixture.initialSha,
+  );
 });
 
 test('publishes only a non-empty validated private backup', (t) => {
