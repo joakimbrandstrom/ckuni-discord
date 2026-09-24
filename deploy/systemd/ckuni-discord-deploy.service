@@ -1,0 +1,14 @@
+[Unit]
+Description=Deploy CK UNI Discord from origin/main
+After=network-online.target ckuni-discord.service
+Wants=network-online.target ckuni-discord.service
+
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=CKUNI_REPO=%h/ckuni-discord
+EnvironmentFile=-%h/.config/ckuni-discord/deploy.env
+ExecStart=%h/.local/libexec/ckuni-discord-auto-deploy
+TimeoutStartSec=30min
+StandardOutput=journal
+StandardError=journal

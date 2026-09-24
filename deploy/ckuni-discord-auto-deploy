@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+umask 077
+
+REPO="${CKUNI_REPO:-${HOME}/ckuni-discord}"
+STATE_DIR="${CKUNI_STATE_DIR:-${HOME}/.local/state/ckuni-discord}"
+BACKUP_DIR="${CKUNI_BACKUP_DIR:-${STATE_DIR}/backups}"
+HEALTH_ATTEMPTS="${CKUNI_HEALTH_ATTEMPTS:-30}"
+HEALTH_INTERVAL_SECONDS="${CKUNI_HEALTH_INTERVAL_SECONDS:-2}"
+MARKER_FILE="${STATE_DIR}/deployed-sha"
+LOCK_FILE="${STATE_DIR}/deploy.lock"
+COMPOSE=(podman compose --profile tunnel)
+
+log() {
+  printf 'deploy: %s\n' "$*"
+}
+
+fail() {
+  log "ERROR: $*" >&2
+  exit 1
+}
+
+wait_for_endpoint() {
+  local endpoint="$1"
+  local attempt
+
+  for ((attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt += 1)); do
+    if curl --fail --silent --max-time 5 "http://127.0.0.1:3000${endpoint}" > /dev/null 2>&1; then
+      return 0
+    fi
+    sleep "${HEALTH_INTERVAL_SECONDS}"
+  done
+
+  fail "${endpoint} did not become ready after ${HEALTH_ATTEMPTS} attempts"
+}
+
+mkdir -p "${STATE_DIR}" "${BACKUP_DIR}"
+exec 9> "${LOCK_FILE}"
+if ! flock -n 9; then
+  log 'another deployment is already running'
+  exit 0
+fi
+
+[[ -d "${REPO}/.git" ]] || fail "repository not found at ${REPO}"
+cd "${REPO}"
+
+branch="$(git symbolic-ref --quiet --short HEAD)" || fail 'repository is not on a branch'
+[[ "${branch}" == 'main' ]] || fail "expected branch main, found ${branch}"
+
+if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+  fail 'repository has uncommitted or untracked files'
+fi
+
+log 'fetching origin/main'
+GIT_TERMINAL_PROMPT=0 git fetch --no-tags origin \
+  refs/heads/main:refs/remotes/origin/main
+
+current_sha="$(git rev-parse HEAD)"
+target_sha="$(git rev-parse 'refs/remotes/origin/main^{commit}')"
+deployed_sha=''
+if [[ -f "${MARKER_FILE}" ]]; then
+  IFS= read -r deployed_sha < "${MARKER_FILE}" || true
+fi
+
+log "current=${current_sha} target=${target_sha} deployed=${deployed_sha:-none}"
+if [[ "${current_sha}" == "${target_sha}" && "${deployed_sha}" == "${target_sha}" ]]; then
+  log 'already deployed'
+  exit 0
+fi
+
+if [[ "${current_sha}" != "${target_sha}" ]]; then
+  if git merge-base --is-ancestor "${target_sha}" "${current_sha}"; then
+    fail 'local main contains commits not present on origin/main'
+  fi
+  if ! git merge-base --is-ancestor "${current_sha}" "${target_sha}"; then
+    fail 'local main and origin/main have diverged'
+  fi
+fi
+
+log 'creating PostgreSQL backup'
+"${REPO}/backup-postgres.sh" "${BACKUP_DIR}"
+
+if [[ "${current_sha}" != "${target_sha}" ]]; then
+  log 'fast-forwarding checkout'
+  git merge --ff-only --no-edit "${target_sha}"
+fi
+
+log 'building and starting the tunnel profile'
+"${COMPOSE[@]}" up -d --build
+
+log 'waiting for /health'
+wait_for_endpoint '/health'
+log 'waiting for /ready'
+wait_for_endpoint '/ready'
+
+cloudflared_id="$("${COMPOSE[@]}" ps -q cloudflared)"
+[[ -n "${cloudflared_id}" ]] || fail 'cloudflared container was not created'
+[[ "$(podman inspect --format '{{.State.Running}}' "${cloudflared_id}")" == 'true' ]] || \
+  fail 'cloudflared container is not running'
+
+log 'registering Discord commands'
+"${COMPOSE[@]}" run --rm bot node dist/src/discord/register-commands.js
+
+marker_temp="$(mktemp "${STATE_DIR}/.deployed-sha.XXXXXX")"
+printf '%s\n' "${target_sha}" > "${marker_temp}"
+mv "${marker_temp}" "${MARKER_FILE}"
+log "deployment ${target_sha} successful"

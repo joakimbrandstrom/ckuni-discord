@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# backup-postgres.sh — Create a timestamped pg_dump of the CK UNI database.
+# backup-postgres.sh - Create a timestamped pg_dump of the CK UNI database.
 #
 # Usage:
 #   ./backup-postgres.sh [backup-dir]
 #
 # The backup directory defaults to ./backups (relative to the script).
-# The script reads the same .env file used by podman Compose, so no
-# credentials need to be specified on the command line.
+# Database names are read inside the postgres container, so credentials are
+# never sourced into this shell or included on the command line.
 #
 # The dump is written to:
-#   <backup-dir>/ckuni_YYYYMMDD_HHMMSS.dump
+#   <backup-dir>/ckuni_YYYYMMDD_HHMMSS_PID.dump
 #
 # Restore with:
 #   pg_restore --clean --if-exists -d <DATABASE_URL> <file.dump>
@@ -18,31 +18,41 @@
 #     -U $POSTGRES_USER -d $POSTGRES_DB < <file.dump>
 
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="${1:-${SCRIPT_DIR}/backups}"
-ENV_FILE="${SCRIPT_DIR}/.env"
-
-# Load .env if present (ignore missing vars)
-if [[ -f "${ENV_FILE}" ]]; then
-  # shellcheck disable=SC1090
-  set -a; source "${ENV_FILE}"; set +a
-fi
-
-: "${POSTGRES_USER:=ckuni}"
-: "${POSTGRES_DB:=ckuni}"
 
 TIMESTAMP="$(date -u +%Y%m%d_%H%M%S)"
-DUMP_FILE="${BACKUP_DIR}/ckuni_${TIMESTAMP}.dump"
+DUMP_FILE="${BACKUP_DIR}/ckuni_${TIMESTAMP}_${BASHPID}.dump"
+TEMP_DUMP=""
+
+cleanup() {
+  if [[ -n "${TEMP_DUMP}" ]]; then
+    rm -f "${TEMP_DUMP}"
+  fi
+}
+
+trap cleanup EXIT
 
 mkdir -p "${BACKUP_DIR}"
+TEMP_DUMP="$(mktemp "${BACKUP_DIR}/.ckuni_${TIMESTAMP}.XXXXXX.tmp")"
+cd "${SCRIPT_DIR}"
 
-echo "Backing up database '${POSTGRES_DB}' to ${DUMP_FILE} …"
+printf 'Backing up CK UNI PostgreSQL to %s\n' "${DUMP_FILE}"
 
-# Run pg_dump inside the running postgres container without stopping it.
+# Write and validate a private temporary archive before publishing the backup.
 podman compose exec -T postgres \
-  pg_dump -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Fc \
-  > "${DUMP_FILE}"
+  sh -c 'exec pg_dump -U "${POSTGRES_USER:-ckuni}" -d "${POSTGRES_DB:-ckuni}" -Fc' \
+  > "${TEMP_DUMP}"
 
-echo "Backup complete: ${DUMP_FILE}"
-echo "Size: $(du -h "${DUMP_FILE}" | cut -f1)"
+if [[ ! -s "${TEMP_DUMP}" ]]; then
+  printf 'Backup failed: pg_dump produced an empty archive\n' >&2
+  exit 1
+fi
+
+podman compose exec -T postgres pg_restore --list < "${TEMP_DUMP}" > /dev/null
+mv "${TEMP_DUMP}" "${DUMP_FILE}"
+TEMP_DUMP=""
+
+printf 'Backup complete: %s\n' "${DUMP_FILE}"
