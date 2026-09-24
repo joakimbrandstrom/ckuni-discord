@@ -35,6 +35,26 @@ wait_for_endpoint() {
   fail "${endpoint} did not become ready after ${HEALTH_ATTEMPTS} attempts"
 }
 
+wait_for_tunnel() {
+  local attempt
+  local cloudflared_id
+  local cloudflared_logs
+
+  for ((attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt += 1)); do
+    cloudflared_id="$("${COMPOSE[@]}" ps -q cloudflared)"
+    if [[ -n "${cloudflared_id}" ]] && \
+      [[ "$(podman inspect --format '{{.State.Running}}' "${cloudflared_id}")" == 'true' ]]; then
+      cloudflared_logs="$(podman logs --tail 200 "${cloudflared_id}" 2>&1)" || true
+      if [[ "${cloudflared_logs}" == *'Registered tunnel connection'* ]]; then
+        return 0
+      fi
+    fi
+    sleep "${HEALTH_INTERVAL_SECONDS}"
+  done
+
+  fail 'cloudflared did not register a tunnel connection'
+}
+
 mkdir -p "${STATE_DIR}" "${BACKUP_DIR}"
 exec 9> "${LOCK_FILE}"
 if ! flock -n 9; then
@@ -81,6 +101,9 @@ fi
 log 'creating PostgreSQL backup'
 "${REPO}/backup-postgres.sh" "${BACKUP_DIR}"
 
+log 'stopping the bot before migrations'
+"${COMPOSE[@]}" stop bot
+
 if [[ "${current_sha}" != "${target_sha}" ]]; then
   log 'fast-forwarding checkout'
   git merge --ff-only --no-edit "${target_sha}"
@@ -94,10 +117,8 @@ wait_for_endpoint '/health'
 log 'waiting for /ready'
 wait_for_endpoint '/ready'
 
-cloudflared_id="$("${COMPOSE[@]}" ps -q cloudflared)"
-[[ -n "${cloudflared_id}" ]] || fail 'cloudflared container was not created'
-[[ "$(podman inspect --format '{{.State.Running}}' "${cloudflared_id}")" == 'true' ]] || \
-  fail 'cloudflared container is not running'
+log 'waiting for the Cloudflare tunnel'
+wait_for_tunnel
 
 log 'registering Discord commands'
 "${COMPOSE[@]}" run --rm bot node dist/src/discord/register-commands.js

@@ -176,8 +176,10 @@ systemctl --user start ckuni-discord-deploy.service
 
 The timer checks for updates about every two minutes. Each new target commit is deployed with the
 permanent tunnel profile, database migrations, a production image rebuild, local health and
-readiness checks, and Discord command registration. The successful commit is recorded only after
-all checks pass, so a failed deployment is retried on the next timer activation.
+readiness checks, a registered Cloudflare connection, and Discord command registration. After the
+backup completes, the old bot is stopped before the checkout changes or migrations run. The
+successful commit is recorded only after all checks pass, so a failed deployment is retried on the
+next timer activation.
 
 By default, state and backups are stored outside the Git checkout:
 

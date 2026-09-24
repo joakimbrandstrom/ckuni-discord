@@ -91,6 +91,8 @@ if [[ "\${FAIL_UP:-0}" == '1' && "$*" == *'up -d --build'* ]]; then
 fi
 if [[ "$1" == 'inspect' ]]; then
   printf 'true\\n'
+elif [[ "$1" == 'logs' ]]; then
+  printf 'Registered tunnel connection\\n'
 elif [[ "$*" == *'ps -q cloudflared'* ]]; then
   printf 'cloudflared-id\\n'
 fi
@@ -164,6 +166,9 @@ test('backs up, fast-forwards, validates, and records a deployment', (t) => {
   assert.match(commands, /backup/);
   assert.match(commands, /up -d --build/);
   assert.match(commands, /run --rm bot node dist\/src\/discord\/register-commands\.js/);
+  assert.ok(commands.indexOf('backup') < commands.indexOf('stop bot'));
+  assert.ok(commands.indexOf('stop bot') < commands.indexOf('up -d --build'));
+  assert.match(commands, /podman logs --tail 200 cloudflared-id/);
 });
 
 test('retries a failed deployment even after the checkout was updated', (t) => {
