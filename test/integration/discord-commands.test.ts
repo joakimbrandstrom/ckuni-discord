@@ -712,3 +712,21 @@ integration(
     }
   },
 );
+
+integration(
+  'Zwift commands acknowledge privately before reporting disabled provider state',
+  async () => {
+    const before = discordCalls.length;
+    const result = await send(
+      interaction('zwift', 'zwift-member', [], { options: [{ name: 'results', type: 1 }] }),
+    );
+    assert.deepEqual(result.json(), { type: 5, data: { flags: 64 } });
+    await waitForDiscordBackgroundTasks();
+    const callback = discordCalls
+      .slice(before)
+      .find((call) => call.url.endsWith('/messages/@original'));
+    assert.ok(callback);
+    assert.match(callback.body ?? '', /avstängd/);
+    assert.deepEqual(JSON.parse(callback.body ?? '{}').allowed_mentions, { parse: [] });
+  },
+);

@@ -92,3 +92,30 @@ export const commands = [
     description: 'Visa CK UNI:s deltagartabell',
   },
 ];
+
+export function commandsWithZwift(features: { results: boolean }): unknown[] {
+  if (!features.results) return commands;
+  return [
+    ...commands,
+    {
+      name: 'zwift',
+      description: 'Valfria Zwift-uppgifter från godkända källor',
+      options: [
+        {
+          type: 1,
+          name: 'results',
+          description: 'Visa tillgängliga tävlingsresultat (inte CK UNI-närvaro)',
+          options: [
+            { type: 3, name: 'url', description: 'Zwift-eventlänk', max_length: 500 },
+            {
+              type: 4,
+              name: 'ride',
+              description: 'CK UNI-pass-ID (ange länk eller pass-ID)',
+              min_value: 1,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+}
