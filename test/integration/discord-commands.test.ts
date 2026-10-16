@@ -609,3 +609,52 @@ integration(
     assert.match(disabled.json().data.content, /har inaktiverats/);
   },
 );
+
+integration(
+  'optional Zwift validation falls back to manual preview and idempotent publication',
+  async () => {
+    const { config } = await import('../../src/config.js');
+    const enabled = config.ZWIFT_ENABLED;
+    config.ZWIFT_ENABLED = true;
+    try {
+      const opened = await send(component('ride_create_new', 'zwift-leader', ['ride-leader']));
+      const draftId = draftIdFrom(opened.json());
+      await send(
+        modal(`ride_draft_basic:${draftId}`, 'zwift-leader', ['ride-leader'], {
+          title: 'Manual fallback',
+          date: '2099-10-27',
+          time: '18:00',
+          duration: '60',
+          ride_type: 'race',
+        }),
+      );
+      const invalid = await send(
+        modal(`ride_draft_details:${draftId}`, 'zwift-leader', ['ride-leader'], {
+          zwift_url: 'https://evil.test/events/123',
+        }),
+      );
+      assert.match(invalid.json().data.content, /giltig Zwift-länk/);
+      const preview = await send(
+        modal(`ride_draft_details:${draftId}`, 'zwift-leader', ['ride-leader'], {
+          zwift_url: 'https://www.zwift.com/events/view/123',
+        }),
+      );
+      assert.match(JSON.stringify(preview.json().data.embeds), /publicera manuellt/);
+      assert.match(JSON.stringify(preview.json().data.components), /Publicera/);
+      const before = discordCalls.filter(
+        (call) => call.method === 'POST' && call.url.includes('/channels/'),
+      ).length;
+      await send(component(`ride_draft_publish:${draftId}`, 'zwift-leader', ['ride-leader']));
+      await waitForDiscordBackgroundTasks();
+      await send(component(`ride_draft_publish:${draftId}`, 'zwift-leader', ['ride-leader']));
+      await waitForDiscordBackgroundTasks();
+      assert.equal(
+        discordCalls.filter((call) => call.method === 'POST' && call.url.includes('/channels/'))
+          .length,
+        before + 1,
+      );
+    } finally {
+      config.ZWIFT_ENABLED = enabled;
+    }
+  },
+);

@@ -38,6 +38,17 @@ there is no redirect resolver or arbitrary-URL fetcher. Unknown link formats req
 allowlist change rather than probing a host. Existing manual input behavior is initially preserved;
 consumers opt into strict event URL validation.
 
+## Ride creation preview (#61)
+
+With `ZWIFT_ENABLED=true`, newly submitted event links in draft forms and ride edits must pass the
+allowlist. With the integration disabled, existing manual command validation remains unchanged.
+The private draft preview adds source, fetch/observation times, availability, missing fields and
+title/start/duration discrepancies if an approved event provider is available. Times show the
+configured zone's UTC offset, including Stockholm DST. All values remain leader-editable through
+the existing forms; suggestions never overwrite draft or template fields. Unavailable lookups
+retain explicit Publicera and the existing idempotent publication/reconciliation path. Previously
+stored unsupported links show a manual fallback rather than preventing publication.
+
 ## Candidate assessment (2026-10-16)
 
 Sources reviewed:

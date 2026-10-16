@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { DateTime } from 'luxon';
 import { config } from '../config.js';
+import { parseZwiftEventUrl } from '../integrations/zwift/url.js';
 import { rideMessage } from '../rides/card.js';
 import { parseCreateRideFields, parseTemplateFields } from '../rides/input.js';
 import {
@@ -315,6 +316,7 @@ async function handleEditRideSubmit(
 ): Promise<Record<string, unknown>> {
   try {
     const parsed = parseCreateRideFields(fields, config.TIMEZONE);
+    if (config.ZWIFT_ENABLED && parsed.zwiftUrl) parseZwiftEventUrl(parsed.zwiftUrl);
     const ride = await updateRide(rideId, parsed);
     if (!ride) return ephemeral('Passet finns inte eller kan inte längre redigeras.');
     updateInteractionLater(interaction, async () => {
