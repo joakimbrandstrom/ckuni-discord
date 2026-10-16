@@ -27,6 +27,9 @@ and provider-side cleanup remain operator actions.
 
 ## Architecture
 
+The disabled-by-default [optional Zwift provider boundary](docs/ZWIFT_INTEGRATION.md) supports
+future permitted event/results/profile lookups. No live provider is configured or required.
+
 ```text
 Discord interactions
             |
