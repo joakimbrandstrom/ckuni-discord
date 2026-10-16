@@ -4,7 +4,10 @@ import { commandsWithZwift } from './commands.js';
 
 try {
   await registerGuildCommands(
-    commandsWithZwift({ results: config.ZWIFT_ENABLED && config.ZWIFT_RESULTS_ENABLED }),
+    commandsWithZwift({
+      results: config.ZWIFT_ENABLED && config.ZWIFT_RESULTS_ENABLED,
+      profiles: config.ZWIFT_ENABLED && config.ZWIFT_PROFILES_ENABLED,
+    }),
   );
   console.log('Registered Discord guild commands.');
 } catch (error) {

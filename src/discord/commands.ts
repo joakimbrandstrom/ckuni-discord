@@ -93,28 +93,57 @@ export const commands = [
   },
 ];
 
-export function commandsWithZwift(features: { results: boolean }): unknown[] {
-  if (!features.results) return commands;
+export function commandsWithZwift(features: { results: boolean; profiles?: boolean }): unknown[] {
+  if (!features.results && !features.profiles) return commands;
   return [
     ...commands,
     {
       name: 'zwift',
       description: 'Valfria Zwift-uppgifter från godkända källor',
       options: [
-        {
-          type: 1,
-          name: 'results',
-          description: 'Visa tillgängliga tävlingsresultat (inte CK UNI-närvaro)',
-          options: [
-            { type: 3, name: 'url', description: 'Zwift-eventlänk', max_length: 500 },
-            {
-              type: 4,
-              name: 'ride',
-              description: 'CK UNI-pass-ID (ange länk eller pass-ID)',
-              min_value: 1,
-            },
-          ],
-        },
+        ...(features.results
+          ? [
+              {
+                type: 1,
+                name: 'results',
+                description: 'Visa tillgängliga tävlingsresultat (inte CK UNI-närvaro)',
+                options: [
+                  { type: 3, name: 'url', description: 'Zwift-eventlänk', max_length: 500 },
+                  {
+                    type: 4,
+                    name: 'ride',
+                    description: 'CK UNI-pass-ID (ange länk eller pass-ID)',
+                    min_value: 1,
+                  },
+                ],
+              },
+            ]
+          : []),
+        ...(features.profiles
+          ? [
+              {
+                type: 1,
+                name: 'profile',
+                description: 'Slå upp tillåtna profiluppgifter utan kontokoppling',
+                options: [
+                  {
+                    type: 3,
+                    name: 'rider',
+                    description: 'Numeriskt Zwift-ryttar-ID',
+                    required: true,
+                    min_length: 1,
+                    max_length: 20,
+                  },
+                ],
+              },
+              { type: 1, name: 'privacy', description: 'Visa hur Zwift-uppgifter hanteras' },
+              {
+                type: 1,
+                name: 'unlink',
+                description: 'Kontrollera och avsluta egen Zwift-koppling',
+              },
+            ]
+          : []),
       ],
     },
   ];
