@@ -10,10 +10,13 @@ import {
 import type { ZwiftSettings } from './settings.js';
 
 type Observation = { provider: string; operation: Operation; outcome: string };
+const MAX_CACHE_BYTES = 1024 * 1024;
+const MAX_RESPONSE_CACHE_BYTES = 256 * 1024;
 
 /** One bounded cache and request budget per process/provider, shared by every Discord consumer. */
 export class ZwiftService {
-  private cache = new Map<string, { expires: number; value: Lookup<unknown> }>();
+  private cache = new Map<string, { expires: number; value: Lookup<unknown>; bytes: number }>();
+  private cacheBytes = 0;
   private nextRequestAt = 0;
   private failures = 0;
   private busy = false;
@@ -25,6 +28,12 @@ export class ZwiftService {
     private now: () => number = Date.now,
     private allowTestProvider = false,
   ) {}
+
+  private deleteCached(key: string): void {
+    const entry = this.cache.get(key);
+    if (entry) this.cacheBytes -= entry.bytes;
+    this.cache.delete(key);
+  }
 
   supports(operation: Operation): boolean {
     return (
@@ -44,7 +53,7 @@ export class ZwiftService {
     const cached = this.cache.get(key);
     if (cached && cached.expires > this.now())
       return structuredClone(cached.value) as Lookup<Data[K]>;
-    this.cache.delete(key);
+    this.deleteCached(key);
     if (this.busy || this.now() < this.nextRequestAt)
       return { status: 'unavailable', reason: 'rate-limited' };
 
@@ -119,11 +128,18 @@ export class ZwiftService {
       this.failures = 0;
       // Personal profiles are deliberately not cached or persisted.
       if (operation !== 'profile' && this.settings.ZWIFT_CACHE_TTL_MS > 0) {
-        if (this.cache.size >= 100) this.cache.delete(this.cache.keys().next().value as string);
-        this.cache.set(key, {
-          expires: this.now() + this.settings.ZWIFT_CACHE_TTL_MS,
-          value: structuredClone(value),
-        });
+        const bytes = Buffer.byteLength(JSON.stringify(value), 'utf8');
+        if (bytes <= MAX_RESPONSE_CACHE_BYTES) {
+          while (this.cache.size >= 100 || this.cacheBytes + bytes > MAX_CACHE_BYTES) {
+            this.deleteCached(this.cache.keys().next().value as string);
+          }
+          this.cache.set(key, {
+            expires: this.now() + this.settings.ZWIFT_CACHE_TTL_MS,
+            value: structuredClone(value),
+            bytes,
+          });
+          this.cacheBytes += bytes;
+        }
       }
     } else if (['timeout', 'unavailable', 'rate-limited', 'invalid-data'].includes(value.reason)) {
       this.failures = Math.min(this.failures + 1, 10);

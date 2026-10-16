@@ -25,7 +25,9 @@ explicit test injection; they cannot be selected through environment variables.
 One lookup may be active per service. A shared per-process request interval bounds all consumers;
 transient errors impose exponential cooldown (max five minutes), with adapter Retry-After respected
 up to one hour. No automatic retry delays a Discord response. Successful event/results responses
-use a maximum 100-entry TTL cache; profiles are not cached. Multi-replica deployments must introduce
+use a maximum 100-entry TTL cache with a 1 MiB serialized-data budget and a 256 KiB per-response
+limit (larger valid responses are served without caching); profiles are not cached.
+Multi-replica deployments must introduce
 a shared provider request budget before enabling a live adapter. Timeouts abort the adapter and
 return even if it ignores cancellation; live adapters must honor the signal for resource cleanup.
 Logs contain categorical outcomes only, never credentials, member IDs or upstream error bodies.

@@ -4,7 +4,7 @@ import { ZwiftRateLimitError } from '../src/integrations/zwift/provider.js';
 import { ZwiftService } from '../src/integrations/zwift/service.js';
 import { zwiftSettingsSchema } from '../src/integrations/zwift/settings.js';
 import { parseZwiftEventUrl } from '../src/integrations/zwift/url.js';
-import { event, mockProvider } from './fixtures/zwift.js';
+import { event, mockProvider, provenance } from './fixtures/zwift.js';
 
 const settings = zwiftSettingsSchema.parse({ ZWIFT_ENABLED: 'true', ZWIFT_TIMEOUT_MS: 10 });
 test('validates settings without truthy false or configurable private endpoints', () => {
@@ -153,5 +153,55 @@ test('rejects invalid/mismatched data and handles outage and Retry-After safely'
       status: 'unavailable',
       reason: 'rate-limited',
     });
+  }
+});
+
+test('cache evicts by total byte budget and does not retain oversized results', async () => {
+  for (const count of [400, 1000]) {
+    let now = Date.now();
+    const calls: string[] = [];
+    const service = new ZwiftService(
+      { ...settings, ZWIFT_CACHE_TTL_MS: 300000 },
+      mockProvider({
+        results: async (id) => {
+          calls.push(id);
+          return {
+            status: 'available',
+            data: {
+              eventId: id,
+              eventName: 'Test',
+              startsAt: null,
+              publishedAt: null,
+              coverage: 'unknown',
+              provenance,
+              entries: Array.from({ length: count }, (_, i) => ({
+                riderId: String(i + 1),
+                displayName: 'N'.repeat(200),
+                category: 'C'.repeat(200),
+                rank: i + 1,
+              })),
+            },
+          };
+        },
+      }),
+      undefined,
+      () => now,
+      true,
+    );
+    const fetch = async (id: string) => {
+      now += settings.ZWIFT_MIN_INTERVAL_MS;
+      assert.equal((await service.lookup('results', id)).status, 'available');
+    };
+    if (count === 400) {
+      for (let i = 1; i <= 9; i++) await fetch(String(i));
+      await fetch('9');
+      assert.equal(calls.length, 9); // Recent entry is still cached.
+      await fetch('1');
+      assert.equal(calls.length, 10); // Old entry was evicted before TTL.
+    } else {
+      await fetch('1');
+      await fetch('1');
+      assert.equal(calls.length, 2); // Oversized valid results never enter the cache.
+    }
   }
 });
