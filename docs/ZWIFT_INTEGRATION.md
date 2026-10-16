@@ -40,8 +40,10 @@ consumers opt into strict event URL validation.
 
 ## Ride creation preview (#61)
 
-With `ZWIFT_ENABLED=true`, newly submitted event links in draft forms and ride edits must pass the
-allowlist. With the integration disabled, existing manual command validation remains unchanged.
+With `ZWIFT_ENABLED=true`, new or changed event links in draft forms and ride edits must pass the
+allowlist and are stored/published in canonical form without query parameters. An unchanged legacy
+link is allowed so that unrelated edits remain possible. With the integration disabled, existing
+manual command validation remains unchanged.
 The private draft preview adds source, fetch/observation times, availability, missing fields and
 title/start/duration discrepancies if an approved event provider is available. Times show the
 configured zone's UTC offset, including Stockholm DST. All values remain leader-editable through

@@ -2,7 +2,6 @@ import { DateTime } from 'luxon';
 import { config } from '../config.js';
 import { zwiftEventPreview } from '../integrations/zwift/event-preview.js';
 import { zwift } from '../integrations/zwift/runtime.js';
-import { parseZwiftEventUrl } from '../integrations/zwift/url.js';
 import { rideMessage, ridePreviewEmbed } from '../rides/card.js';
 import {
   cancelRideDraft,
@@ -20,6 +19,7 @@ import {
   withRideDraftPublicationLock,
 } from '../rides/drafts.js';
 import {
+  normalizeZwiftRideUrl,
   parseRideBasicFields,
   parseRideDetailFields,
   parseRideScheduleFields,
@@ -545,7 +545,9 @@ export async function handleRideCreateModal(
 
   try {
     const fields = modalValues(interaction);
-    if (config.ZWIFT_ENABLED && fields.zwift_url?.trim()) parseZwiftEventUrl(fields.zwift_url);
+    if (config.ZWIFT_ENABLED && fields.zwift_url !== undefined) {
+      fields.zwift_url = normalizeZwiftRideUrl(fields.zwift_url, draft?.zwift_url ?? null) ?? '';
+    }
     let updated: RideDraft | null = null;
     if (action === 'ride_draft_basic') {
       updated = await updateRideDraftBasic(
