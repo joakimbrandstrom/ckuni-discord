@@ -17,7 +17,7 @@ FROM registry.access.redhat.com/hi/nodejs:26 AS runtime
 
 USER 0
 
-RUN rm -rf /usr/lib/node_modules_24/npm \
+RUN rm -rf /usr/lib/node_modules_*/npm \
     && rm -f /usr/bin/npm /usr/bin/npx
 
 ENV NODE_ENV=production
