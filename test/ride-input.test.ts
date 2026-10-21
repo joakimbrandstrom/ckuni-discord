@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  normalizeZwiftRideUrl,
   parseCreateRideFields,
   parseRideBasicFields,
   parseRideDetailFields,
@@ -10,6 +11,23 @@ import {
 } from '../src/rides/input.js';
 
 const now = new Date('2026-08-11T10:00:00Z');
+
+test('enabled Zwift input canonicalizes links while preserving unchanged legacy links', () => {
+  const canonical = 'https://www.zwift.com/events/view/123';
+  const legacy = 'https://legacy.test/event/123';
+  assert.equal(
+    normalizeZwiftRideUrl('https://zwift.com/events/123?utm_source=private', null),
+    canonical,
+  );
+  assert.equal(
+    normalizeZwiftRideUrl(`${canonical}?utm_source=private`, `${canonical}?utm_source=private`),
+    canonical,
+  );
+  assert.equal(normalizeZwiftRideUrl(legacy, legacy), legacy);
+  assert.equal(normalizeZwiftRideUrl('', legacy), undefined);
+  assert.throws(() => normalizeZwiftRideUrl(legacy, null));
+  assert.throws(() => normalizeZwiftRideUrl('https://different.test/123', legacy));
+});
 
 test('parses Swedish modal values in the configured timezone', () => {
   const result = parseCreateRideFields(

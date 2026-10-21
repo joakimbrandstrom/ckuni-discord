@@ -1,5 +1,7 @@
 import { DateTime } from 'luxon';
 import { config } from '../config.js';
+import { zwiftEventPreview } from '../integrations/zwift/event-preview.js';
+import { zwift } from '../integrations/zwift/runtime.js';
 import { rideMessage, ridePreviewEmbed } from '../rides/card.js';
 import {
   cancelRideDraft,
@@ -17,6 +19,7 @@ import {
   withRideDraftPublicationLock,
 } from '../rides/drafts.js';
 import {
+  normalizeZwiftRideUrl,
   parseRideBasicFields,
   parseRideDetailFields,
   parseRideScheduleFields,
@@ -175,7 +178,7 @@ function detailsModal(draft: RideDraft): Record<string, unknown> {
   ]);
 }
 
-function previewData(draft: RideDraft, flags = false): Record<string, unknown> {
+async function previewData(draft: RideDraft, flags = false): Promise<Record<string, unknown>> {
   if (!draft.title || !draft.starts_at || !draft.duration_minutes || !draft.ride_type) {
     return { content: 'Utkastet saknar grunduppgifter.', ...(flags ? { flags: EPHEMERAL } : {}) };
   }
@@ -187,6 +190,7 @@ function previewData(draft: RideDraft, flags = false): Record<string, unknown> {
       draft.notes ||
       draft.extra_comment,
   );
+  const eventPreview = await zwiftEventPreview(draft.zwift_url, draft, zwift, config.TIMEZONE);
   return {
     content: `**Förhandsvisning**\nPasset publiceras i <#${draft.discord_channel_id}> först när du väljer **Publicera**.`,
     embeds: [
@@ -207,6 +211,7 @@ function previewData(draft: RideDraft, flags = false): Record<string, unknown> {
         },
         config.TIMEZONE,
       ),
+      ...(eventPreview ? [eventPreview] : []),
     ],
     components: [
       {
@@ -540,6 +545,9 @@ export async function handleRideCreateModal(
 
   try {
     const fields = modalValues(interaction);
+    if (config.ZWIFT_ENABLED && fields.zwift_url !== undefined) {
+      fields.zwift_url = normalizeZwiftRideUrl(fields.zwift_url, draft?.zwift_url ?? null) ?? '';
+    }
     let updated: RideDraft | null = null;
     if (action === 'ride_draft_basic') {
       updated = await updateRideDraftBasic(
@@ -559,7 +567,7 @@ export async function handleRideCreateModal(
       return ephemeral('Okänt formulär för utkastet.');
     }
     if (!updated) return ephemeral('Utkastet kunde inte uppdateras. Det kan ha gått ut.');
-    return response(previewData(updated, true));
+    return response(await previewData(updated, true));
   } catch (error) {
     return ephemeral(error instanceof Error ? error.message : 'Kunde inte uppdatera utkastet.');
   }

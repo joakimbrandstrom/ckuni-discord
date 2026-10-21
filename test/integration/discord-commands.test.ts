@@ -609,3 +609,106 @@ integration(
     assert.match(disabled.json().data.content, /har inaktiverats/);
   },
 );
+
+integration(
+  'optional Zwift validation falls back to manual preview and idempotent publication',
+  async () => {
+    const { config } = await import('../../src/config.js');
+    const enabled = config.ZWIFT_ENABLED;
+    config.ZWIFT_ENABLED = true;
+    try {
+      const opened = await send(component('ride_create_new', 'zwift-leader', ['ride-leader']));
+      const draftId = draftIdFrom(opened.json());
+      // A draft saved before the optional integration was enabled may contain a legacy link.
+      await db.pool.query('UPDATE ride_drafts SET zwift_url=$2 WHERE id=$1', [
+        draftId,
+        'https://legacy.test/event',
+      ]);
+      await send(
+        modal(`ride_draft_basic:${draftId}`, 'zwift-leader', ['ride-leader'], {
+          title: 'Manual fallback',
+          date: '2099-10-27',
+          time: '18:00',
+          duration: '60',
+          ride_type: 'race',
+        }),
+      );
+      const invalid = await send(
+        modal(`ride_draft_details:${draftId}`, 'zwift-leader', ['ride-leader'], {
+          zwift_url: 'https://evil.test/events/123',
+        }),
+      );
+      assert.match(invalid.json().data.content, /giltig Zwift-länk/);
+      const legacyPreview = await send(
+        modal(`ride_draft_details:${draftId}`, 'zwift-leader', ['ride-leader'], {
+          zwift_url: 'https://legacy.test/event',
+          description: 'Changed description',
+        }),
+      );
+      assert.match(JSON.stringify(legacyPreview.json().data.embeds), /manuella uppgifter/);
+      const preview = await send(
+        modal(`ride_draft_details:${draftId}`, 'zwift-leader', ['ride-leader'], {
+          zwift_url: 'https://www.zwift.com/events/view/123?utm_source=private',
+        }),
+      );
+      assert.match(JSON.stringify(preview.json().data.embeds), /publicera manuellt/);
+      assert.match(JSON.stringify(preview.json().data.components), /Publicera/);
+      assert.equal(
+        (await db.pool.query('SELECT zwift_url FROM ride_drafts WHERE id=$1', [draftId])).rows[0]
+          .zwift_url,
+        'https://www.zwift.com/events/view/123',
+      );
+      const before = discordCalls.filter(
+        (call) => call.method === 'POST' && call.url.includes('/channels/'),
+      ).length;
+      await send(component(`ride_draft_publish:${draftId}`, 'zwift-leader', ['ride-leader']));
+      await waitForDiscordBackgroundTasks();
+      await send(component(`ride_draft_publish:${draftId}`, 'zwift-leader', ['ride-leader']));
+      await waitForDiscordBackgroundTasks();
+      assert.equal(
+        discordCalls.filter((call) => call.method === 'POST' && call.url.includes('/channels/'))
+          .length,
+        before + 1,
+      );
+      const ride = (
+        await db.pool.query('SELECT id, zwift_url FROM rides WHERE creation_draft_id=$1', [draftId])
+      ).rows[0];
+      assert.equal(ride.zwift_url, 'https://www.zwift.com/events/view/123');
+      await db.pool.query('UPDATE rides SET zwift_url=$2 WHERE id=$1', [
+        ride.id,
+        'https://legacy.test/event',
+      ]);
+      const editFields = {
+        title: 'Legacy edit',
+        date_time: '2099-10-27 18:00',
+        duration: '60',
+        ride_type: 'race',
+        details: 'Zwift: https://legacy.test/event',
+      };
+      const edited = await send(
+        modal(`ride_edit:${ride.id}`, 'zwift-leader', ['ride-leader'], editFields),
+      );
+      assert.match(edited.json().data.content, /har sparats/);
+      await waitForDiscordBackgroundTasks();
+      const savedLegacy = (
+        await db.pool.query('SELECT title, zwift_url FROM rides WHERE id=$1', [ride.id])
+      ).rows[0];
+      assert.equal(savedLegacy.title, 'Legacy edit');
+      assert.equal(savedLegacy.zwift_url, 'https://legacy.test/event');
+      await send(
+        modal(`ride_edit:${ride.id}`, 'zwift-leader', ['ride-leader'], {
+          ...editFields,
+          details: 'Zwift: https://zwift.com/events/123?utm_source=private',
+        }),
+      );
+      await waitForDiscordBackgroundTasks();
+      assert.equal(
+        (await db.pool.query('SELECT zwift_url FROM rides WHERE id=$1', [ride.id])).rows[0]
+          .zwift_url,
+        'https://www.zwift.com/events/view/123',
+      );
+    } finally {
+      config.ZWIFT_ENABLED = enabled;
+    }
+  },
+);

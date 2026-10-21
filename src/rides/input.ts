@@ -1,3 +1,4 @@
+import { parseZwiftEventUrl } from '../integrations/zwift/url.js';
 import { parseLocalRideStart } from './time.js';
 
 export const RIDE_TYPES = ['social', 'intervals', 'endurance', 'race', 'outdoor'] as const;
@@ -122,6 +123,21 @@ function parseHttpUrl(value: string | undefined): string | undefined {
     throw new Error('Zwift-länken måste börja med http:// eller https://.');
   }
   return trimmed;
+}
+
+/** Enabled-integration input policy: canonical new links, but allow unchanged legacy values. */
+export function normalizeZwiftRideUrl(
+  value: string | undefined,
+  previous: string | null,
+): string | undefined {
+  const trimmed = optional(value);
+  if (!trimmed) return undefined;
+  try {
+    return parseZwiftEventUrl(trimmed).url;
+  } catch (error) {
+    if (trimmed === previous?.trim()) return trimmed;
+    throw error;
+  }
 }
 
 export function parseRideBasicFields(
