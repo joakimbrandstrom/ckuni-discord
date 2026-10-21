@@ -11,6 +11,10 @@ export const zwiftSettingsSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+  ZWIFT_PROFILES_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   ZWIFT_TIMEOUT_MS: z.coerce.number().int().min(10).max(1500).default(1000),
   ZWIFT_CACHE_TTL_MS: z.coerce.number().int().min(0).max(300000).default(60000),
   ZWIFT_MIN_INTERVAL_MS: z.coerce.number().int().min(1000).max(3600000).default(5000),

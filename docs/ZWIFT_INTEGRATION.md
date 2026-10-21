@@ -19,6 +19,7 @@ explicit test injection; they cannot be selected through environment variables.
 | `ZWIFT_ENABLED` | `false` | literal `true` or `false` |
 | `ZWIFT_PROVIDER` | `none` | only `none` until an adapter is approved |
 | `ZWIFT_RESULTS_ENABLED` | `false` | literal `true` or `false`, also requires master flag |
+| `ZWIFT_PROFILES_ENABLED` | `false` | literal `true` or `false`, also requires master flag |
 | `ZWIFT_TIMEOUT_MS` | `1000` | integer 10–1500 |
 | `ZWIFT_CACHE_TTL_MS` | `60000` | integer 0–300000 |
 | `ZWIFT_MIN_INTERVAL_MS` | `5000` | integer 1000–3600000 |
@@ -63,6 +64,31 @@ entries and reject conflicting entries for the same rider. Empty/unpublished dat
 as proof that nobody attended. Category ordering groups source rankings rather than inventing an
 overall placement. No results command writes attendance or points. Public recap publishing is
 deferred; this iteration only supplies private, on-demand results.
+
+## Profile lookup and identity gate (#63)
+
+`ZWIFT_ENABLED=true` plus `ZWIFT_PROFILES_ENABLED=true` registers private `/zwift profile rider:<ID>`,
+`/zwift privacy` and `/zwift unlink`. A profile lookup requires an approved capable provider and an
+explicit `visibility: permitted` response. That value means the returned fields may be displayed
+to CK UNI members, **not merely that the provider's service account can access them**. Adapters
+must null out individual fields that cannot be redistributed. Country/category/level/name are
+optional; power, FTP, weight, activity history and other fields are discarded by the boundary.
+Profile lookups do not assert ownership or associate a Discord user with the rider.
+
+There is no verified-ownership mechanism from an approved provider, so linking remains unavailable.
+`/zwift link` is not registered and forged/stale invocations explicitly decline the claim. No
+mapping migration is created: there is nothing to consent to, retain or delete in PostgreSQL.
+`/zwift unlink` is an idempotent no-op explaining this state; it never claims to delete upstream
+or Discord-held data. `/zwift privacy` explains the lookup-only model. Profile responses are not
+cached, written to the database, or included in lookup logs. Private Discord responses still follow
+Discord's own data policies; source-side request logs follow the provider's terms.
+
+Before adding verified linking: document a provider-authorized proof bound to the requesting
+Discord user, expiry/replay protection, explicit consent, a uniqueness constraint on rider and
+Discord IDs, and transactional claim/revocation. Add an append-only migration with consent time,
+minimal mapping, audit policy and account-deletion cascade; test duplicate claims, consent
+revocation and removal through the user-deletion flow. Until then, no persisted association can
+be impersonated and presence/attendance cannot use a lookup as an identity match.
 
 ## Candidate assessment (2026-10-16)
 

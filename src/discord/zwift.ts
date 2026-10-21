@@ -1,4 +1,5 @@
 import { unavailableText } from '../integrations/zwift/presentation.js';
+import { formatZwiftProfile } from '../integrations/zwift/profile.js';
 import { formatZwiftResults } from '../integrations/zwift/results.js';
 import type { ZwiftService } from '../integrations/zwift/service.js';
 import { parseZwiftEventUrl } from '../integrations/zwift/url.js';
@@ -20,6 +21,23 @@ export async function zwiftCommandContent(
   const { service } = context;
   if (!service.settings.ZWIFT_ENABLED) return unavailableText('disabled');
   const sub = interaction.data?.options?.find((option) => option.type === 1);
+  if (sub && ['profile', 'privacy', 'unlink', 'link'].includes(sub.name)) {
+    if (!service.settings.ZWIFT_PROFILES_ENABLED) return 'Zwift-profiler är avstängda.';
+    if (sub.name === 'privacy')
+      return 'Endast privata uppslag av fält som källan tillåter. Den här versionen sparar inga Zwift-kontokopplingar och cachar inte profiler. Loggar innehåller inga ryttar-ID:n eller profilfält. Discord och källan har egna lagringsregler. Närvaro och poäng påverkas inte. Kontokoppling kräver framtida verifierat ägarskap; lämna aldrig ditt Zwift-lösenord till boten.';
+    if (sub.name === 'unlink')
+      return 'Den här versionen sparar inga Zwift-kontokopplingar. Det finns ingen koppling att ta bort. Närvaro och poäng påverkas inte.';
+    if (sub.name === 'link')
+      return 'Kontokoppling är inte tillgänglig: ägarskap kan inte verifieras. Inget ryttar-ID sparas eller kopplas till ditt Discord-konto.';
+    if (!service.supports('profile')) return unavailableText('unsupported');
+    const riderId = sub.options?.find((option) => option.name === 'rider')?.value;
+    if (typeof riderId !== 'string' || !/^[1-9]\d{0,19}$/.test(riderId))
+      return 'Ange ett giltigt numeriskt Zwift-ryttar-ID.';
+    const result = await service.lookup('profile', riderId);
+    return result.status === 'available'
+      ? formatZwiftProfile(result.data, context.timezone)
+      : unavailableText(result.reason);
+  }
   if (sub?.name !== 'results') return 'Okänt Zwift-underkommando.';
   if (!service.settings.ZWIFT_RESULTS_ENABLED) return 'Zwift-resultat är avstängda.';
   if (!service.supports('results')) return unavailableText('unsupported');
