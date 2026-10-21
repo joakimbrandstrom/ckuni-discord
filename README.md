@@ -246,6 +246,12 @@ sets ordering. Omit either line for a manually scheduled or non-pinned template.
 and select the template by name to create a ride from it. The older `/ride mall-skapa id:3` command
 is temporarily available for backwards compatibility and opens the same draft and preview flow.
 
+### Optional Zwift lookups
+
+Optional `/zwift results` lookup is described in the
+[Zwift integration guide](docs/ZWIFT_INTEGRATION.md#results-lookup-62). It is disabled by default
+and requires a permitted results provider; no live adapter is included.
+
 ### Leaderboard
 
 ```text

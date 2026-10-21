@@ -18,6 +18,7 @@ explicit test injection; they cannot be selected through environment variables.
 | --- | --- | --- |
 | `ZWIFT_ENABLED` | `false` | literal `true` or `false` |
 | `ZWIFT_PROVIDER` | `none` | only `none` until an adapter is approved |
+| `ZWIFT_RESULTS_ENABLED` | `false` | literal `true` or `false`, also requires master flag |
 | `ZWIFT_TIMEOUT_MS` | `1000` | integer 10–1500 |
 | `ZWIFT_CACHE_TTL_MS` | `60000` | integer 0–300000 |
 | `ZWIFT_MIN_INTERVAL_MS` | `5000` | integer 1000–3600000 |
@@ -50,6 +51,18 @@ configured zone's UTC offset, including Stockholm DST. All values remain leader-
 the existing forms; suggestions never overwrite draft or template fields. Unavailable lookups
 retain explicit Publicera and the existing idempotent publication/reconciliation path. Previously
 stored unsupported links show a manual fallback rather than preventing publication.
+
+## Results lookup (#62)
+
+`/zwift results url:<event link>` or `/zwift results ride:<CK UNI ride ID>` is registered only when
+both `ZWIFT_ENABLED` and `ZWIFT_RESULTS_ENABLED` are true. Re-run `npm run commands:register` after
+changing flags. Requests are acknowledged privately before lookup and restricted to CK UNI guild
+members. A missing or unapproved provider gives a clear unavailable response. Results retain
+source category/rank semantics, show at most ten unique entries, collapse identical duplicate
+entries and reject conflicting entries for the same rider. Empty/unpublished data is not presented
+as proof that nobody attended. Category ordering groups source rankings rather than inventing an
+overall placement. No results command writes attendance or points. Public recap publishing is
+deferred; this iteration only supplies private, on-demand results.
 
 ## Candidate assessment (2026-10-16)
 

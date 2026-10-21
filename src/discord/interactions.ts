@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { DateTime } from 'luxon';
 import { config } from '../config.js';
+import { zwift } from '../integrations/zwift/runtime.js';
 import { rideMessage } from '../rides/card.js';
 import {
   normalizeZwiftRideUrl,
@@ -47,6 +48,7 @@ import {
 import { scheduledEventInput } from './ride-publication.js';
 import { verifyDiscordSignature } from './signature.js';
 import type { DiscordInteraction, DiscordOption, DiscordUser } from './types.js';
+import { zwiftCommandContent } from './zwift.js';
 
 const EPHEMERAL = 1 << 6;
 
@@ -476,6 +478,21 @@ async function handleCommand(interaction: DiscordInteraction): Promise<Record<st
   const name = interaction.data?.name;
   if (name === 'ping') return ephemeral('CK UNI-boten är online 🚴');
   if (name === 'ride') return handleRide(interaction);
+  if (name === 'zwift') {
+    runDiscordBackgroundTask(async () => {
+      const content = await zwiftCommandContent(interaction, {
+        service: zwift,
+        guildId: config.DISCORD_GUILD_ID,
+        timezone: config.TIMEZONE,
+        getRide,
+      });
+      await editOriginalInteractionResponse(interaction.application_id, interaction.token, {
+        content,
+        allowed_mentions: { parse: [] },
+      });
+    });
+    return response({ flags: EPHEMERAL }, 5);
+  }
 
   const user = getUser(interaction);
   if (!user) return ephemeral('Kunde inte identifiera Discord-användaren.');
