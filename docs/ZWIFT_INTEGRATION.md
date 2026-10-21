@@ -129,6 +129,8 @@ Final CK UNI leader-confirmed attendance is the only scoring authority. Strava r
 ## Validation
 
 For the research-only presence decision, see [online-status feasibility (#64)](ZWIFT_PRESENCE_ASSESSMENT.md).
+For blocked advisory matching and the #12/#14 dependency reconciliation, see
+[attendance readiness (#65)](ZWIFT_ATTENDANCE_READINESS.md).
 
 `npm run typecheck`, `npm run check`, `npm test`, `npm run build`.
 Provider tests use synthetic fixtures and do not call Zwift or Discord.
