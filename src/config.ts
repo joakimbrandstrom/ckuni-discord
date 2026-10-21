@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { optionalNonEmpty } from './env.js';
+import { zwiftSettingsSchema } from './integrations/zwift/settings.js';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -21,4 +22,4 @@ const schema = z.object({
   DISCORD_GENERAL_CHANNEL_ID: optionalNonEmpty,
 });
 
-export const config = schema.parse(process.env);
+export const config = schema.extend(zwiftSettingsSchema.shape).parse(process.env);

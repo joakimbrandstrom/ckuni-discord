@@ -27,6 +27,9 @@ and provider-side cleanup remain operator actions.
 
 ## Architecture
 
+The disabled-by-default [optional Zwift provider boundary](docs/ZWIFT_INTEGRATION.md) supports
+future permitted event/results/profile lookups. No live provider is configured or required.
+
 ```text
 Discord interactions
             |
@@ -332,6 +335,11 @@ Run `npm run format` to apply Biome formatting and safe lint fixes. Mutation tes
 available through `npm run mutation`; its HTML report is written to `reports/mutation/`. The
 focused mutation suite covers deterministic ride and authorization
 logic and runs weekly or on demand in GitHub Actions rather than blocking every pull request.
+
+The scoped npm override for `typed-rest-client@2.3.1` replaces its vulnerable `qs@6.15.1`
+pin with `qs@6.16.0`. This dependency comes from Stryker; remove the override when Stryker
+adopts a REST-client release that already uses a fixed `qs` version. `npm audit` checks
+both production and development dependencies.
 
 The test suite uses Node's built-in test runner through `tsx`. HTTP tests use
 `Fastify.inject()`, so they do not open a network port. PostgreSQL integration

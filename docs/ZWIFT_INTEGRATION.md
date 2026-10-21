@@ -1,0 +1,80 @@
+# Optional Zwift integration (#60)
+
+## Decision and current capabilities
+
+The default is disabled, with no live adapter, network requests, credentials, or member account
+requirement. Enabling the flag alone does not enable data access. Manual ride creation, signups,
+reminders and CK UNI attendance/scoring remain independent of Zwift availability.
+
+The typed boundary supports event details, results and minimal optional profiles independently.
+Missing fields are explicit `null`; responses include source, fetch/observation timestamps and
+source-reported/unknown confidence. Presence, attendance and verified identity are separate
+capabilities and currently unsupported. Synthetic providers live only in test fixtures and require
+explicit test injection; they cannot be selected through environment variables.
+
+## Configuration
+
+| Variable | Default | Validation |
+| --- | --- | --- |
+| `ZWIFT_ENABLED` | `false` | literal `true` or `false` |
+| `ZWIFT_PROVIDER` | `none` | only `none` until an adapter is approved |
+| `ZWIFT_TIMEOUT_MS` | `1000` | integer 10–1500 |
+| `ZWIFT_CACHE_TTL_MS` | `60000` | integer 0–300000 |
+| `ZWIFT_MIN_INTERVAL_MS` | `5000` | integer 1000–3600000 |
+
+One lookup may be active per service. A shared per-process request interval bounds all consumers;
+transient errors impose exponential cooldown (max five minutes), with adapter Retry-After respected
+up to one hour. No automatic retry delays a Discord response. Successful event/results responses
+use a maximum 100-entry TTL cache with a 1 MiB serialized-data budget and a 256 KiB per-response
+limit (larger valid responses are served without caching); profiles are not cached.
+Multi-replica deployments must introduce
+a shared provider request budget before enabling a live adapter. Timeouts abort the adapter and
+return even if it ignores cancellation; live adapters must honor the signal for resource cleanup.
+Logs contain categorical outcomes only, never credentials, member IDs or upstream error bodies.
+
+Event links are parsed locally against exact HTTPS hosts and numeric event paths. Only the stable
+ID crosses the provider boundary. Query parameters are discarded from the canonical reference;
+there is no redirect resolver or arbitrary-URL fetcher. Unknown link formats require an explicit
+allowlist change rather than probing a host. Existing manual input behavior is initially preserved;
+consumers opt into strict event URL validation.
+
+## Candidate assessment (2026-10-16)
+
+Sources reviewed:
+
+- [Zwift legal](https://www.zwift.com/terms) and
+  [Terms of Service](https://support.zwift.com/en_us/terms-of-service-HJt7VBYyH).
+  Terms restrict unauthorized automated access and scraping. Public visibility is not a grant
+  of third-party collection or redistribution rights.
+- [ZwiftPower FAQ](https://support.zwift.com/en_us/zwiftpower-faq-BJhCucmDv): browser-accessible
+  results do not establish an authorized bot API or complete participation coverage.
+- User-suggested [zpdatafetch](https://github.com/puckdoug/zpdatafetch): Python client documents
+  ZwiftPower results/signups/rankings using account credentials. Its `zdata` component explicitly
+  uses an unofficial Zwift API for profiles, activities and riders in worlds. Its `zrdata` component
+  documents a separately authorized Zwiftracing API and rate limits; evaluate directly with that
+  provider for results coverage and redistribution rights. Zwift Status is service health, not rider
+  presence. No dependency added; library licensing does not grant source-data access rights.
+- User-suggested [@dofek/zwift](https://www.npmjs.com/package/@dofek/zwift), README v0.1.67:
+  explicitly unofficial/private game-client endpoints, password sign-in, observed game-client
+  headers and no supported public contract. Documented methods cover profiles/activities/fitness
+  data, not a permitted events/results/presence API. No dependency added.
+
+No reviewed candidate establishes permission for this bot's intended data use. This is an access
+decision, not a claim that the underlying data cannot technically be retrieved.
+
+## Gate for a live adapter
+
+Record the authorizing provider/terms version or written authorization, permitted endpoints and
+fields, event types/coverage, identity semantics, consent, display/redistribution rights, retention,
+rate limits, authentication and revocation before enabling operations. A provider may support only
+one operation. Runtime-validate all responses; map upstream errors to normalized unavailable states.
+Use server-side secrets only for an explicitly authorized integration. Do not collect member Zwift
+passwords, automate accounts, impersonate a game client, scrape, or create/edit Club events.
+
+Never treat signup, presence, generic activity overlap or absence from results as attendance proof.
+Final CK UNI leader-confirmed attendance is the only scoring authority. Strava remains retired.
+
+## Validation
+
+`npm run typecheck`, `npm run check`, `npm test`, `npm run build`.
+Provider tests use synthetic fixtures and do not call Zwift or Discord.
