@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/hi/nodejs:24-builder AS build
+FROM registry.access.redhat.com/hi/nodejs:26-builder AS build
 
 WORKDIR /app
 
@@ -13,11 +13,11 @@ COPY --chown=65532:65532 migrations ./migrations
 RUN npm run build && npm prune --omit=dev
 
 
-FROM registry.access.redhat.com/hi/nodejs:24 AS runtime
+FROM registry.access.redhat.com/hi/nodejs:26 AS runtime
 
 USER 0
 
-RUN rm -rf /usr/lib/node_modules_24/npm \
+RUN rm -rf /usr/lib/node_modules_*/npm \
     && rm -f /usr/bin/npm /usr/bin/npx
 
 ENV NODE_ENV=production
