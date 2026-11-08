@@ -19,12 +19,12 @@ to the workflow run summary, including for scheduled and manually triggered scan
 
 The SonarQube job uses the official SonarSource GitHub Action. Create the project in SonarQube first, then configure these GitHub repository settings:
 
-| Type | Name | Value |
-| --- | --- | --- |
-| Variable | `SONAR_HOST_URL` | URL of the SonarQube server, for example `https://sonarqube.example.com` |
-| Variable | `SONAR_PROJECT_KEY` | Project key configured in SonarQube |
-| Secret | `SONAR_TOKEN` | Project analysis token generated in SonarQube |
-| Secret, optional | `SONAR_ROOT_CERT` | PEM certificate when the SonarQube endpoint uses a private/internal CA |
+| Type             | Name                | Value                                                                    |
+| ---------------- | ------------------- | ------------------------------------------------------------------------ |
+| Variable         | `SONAR_HOST_URL`    | URL of the SonarQube server, for example `https://sonarqube.example.com` |
+| Variable         | `SONAR_PROJECT_KEY` | Project key configured in SonarQube                                      |
+| Secret           | `SONAR_TOKEN`       | Project analysis token generated in SonarQube                            |
+| Secret, optional | `SONAR_ROOT_CERT`   | PEM certificate when the SonarQube endpoint uses a private/internal CA   |
 
 Until the required settings are present, the SonarQube step is skipped and the workflow emits a notice instead of failing CI.
 
