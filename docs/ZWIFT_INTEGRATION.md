@@ -14,13 +14,13 @@ explicit test injection; they cannot be selected through environment variables.
 
 ## Configuration
 
-| Variable | Default | Validation |
-| --- | --- | --- |
-| `ZWIFT_ENABLED` | `false` | literal `true` or `false` |
-| `ZWIFT_PROVIDER` | `none` | only `none` until an adapter is approved |
-| `ZWIFT_TIMEOUT_MS` | `1000` | integer 10–1500 |
-| `ZWIFT_CACHE_TTL_MS` | `60000` | integer 0–300000 |
-| `ZWIFT_MIN_INTERVAL_MS` | `5000` | integer 1000–3600000 |
+| Variable                | Default | Validation                               |
+| ----------------------- | ------- | ---------------------------------------- |
+| `ZWIFT_ENABLED`         | `false` | literal `true` or `false`                |
+| `ZWIFT_PROVIDER`        | `none`  | only `none` until an adapter is approved |
+| `ZWIFT_TIMEOUT_MS`      | `1000`  | integer 10–1500                          |
+| `ZWIFT_CACHE_TTL_MS`    | `60000` | integer 0–300000                         |
+| `ZWIFT_MIN_INTERVAL_MS` | `5000`  | integer 1000–3600000                     |
 
 One lookup may be active per service. A shared per-process request interval bounds all consumers;
 transient errors impose exponential cooldown (max five minutes), with adapter Retry-After respected

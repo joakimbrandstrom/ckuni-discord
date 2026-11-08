@@ -151,13 +151,13 @@ compatibility, but leaders should normally select templates by name through `/ri
 
 Recommended overrides:
 
-| Role | View channel | Send messages | Use application commands | Read history |
-| --- | --- | --- | --- | --- |
-| `CK UNI Rider` | Allow | Deny | Allow | Allow |
-| `Gäst` | Allow | Deny | Allow | Allow |
-| `Ledare` | Allow | Allow | Allow | Allow |
-| `System Admin` | Allow | Allow | Allow | Allow |
-| CK UNI bot | Allow | Allow | Allow | Allow |
+| Role           | View channel | Send messages | Use application commands | Read history |
+| -------------- | ------------ | ------------- | ------------------------ | ------------ |
+| `CK UNI Rider` | Allow        | Deny          | Allow                    | Allow        |
+| `Gäst`         | Allow        | Deny          | Allow                    | Allow        |
+| `Ledare`       | Allow        | Allow         | Allow                    | Allow        |
+| `System Admin` | Allow        | Allow         | Allow                    | Allow        |
+| CK UNI bot     | Allow        | Allow         | Allow                    | Allow        |
 
 Normal members need application-command and button access so they can list rides and select
 `Jag kommer` or `Kanske`; denying ordinary messages keeps the channel focused. Discord role IDs in
@@ -182,12 +182,12 @@ Spontaneous rides are excluded from official attendance, leaderboard scoring and
 
 Recommended overrides:
 
-| Role | View channel | Send messages | Add reactions |
-| --- | --- | --- | --- |
-| `CK UNI Rider` | Allow | Allow | Allow |
-| `Gäst` | Allow | Deny | Deny |
-| `Ledare` | Allow | Allow | Allow |
-| `System Admin` | Allow | Allow | Allow |
+| Role           | View channel | Send messages | Add reactions |
+| -------------- | ------------ | ------------- | ------------- |
+| `CK UNI Rider` | Allow        | Allow         | Allow         |
+| `Gäst`         | Allow        | Deny          | Deny          |
+| `Ledare`       | Allow        | Allow         | Allow         |
+| `System Admin` | Allow        | Allow         | Allow         |
 
 Suggested channel topic:
 
