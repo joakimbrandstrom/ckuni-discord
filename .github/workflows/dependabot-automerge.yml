@@ -1,0 +1,90 @@
+name: Dependabot auto-merge
+
+on:
+  workflow_run:
+    workflows: [CI, Security]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Wait for CI and security checks, then merge Dependabot PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          for attempt in {1..120}; do
+            runs="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/runs?event=pull_request&head_sha=${HEAD_SHA}&per_page=100")"
+
+            summary="$(jq -c '
+              [.workflow_runs[]
+                | select(.name == "CI" or .name == "Security")]
+              | group_by(.name)
+              | map(max_by([.created_at, .run_attempt])
+                | {key: .name, value: {status: .status, conclusion: .conclusion}})
+              | from_entries
+            ' <<< "$runs")"
+
+            ci_status="$(jq -r '.CI.status // empty' <<< "$summary")"
+            ci_conclusion="$(jq -r '.CI.conclusion // empty' <<< "$summary")"
+            security_status="$(jq -r '.Security.status // empty' <<< "$summary")"
+            security_conclusion="$(jq -r '.Security.conclusion // empty' <<< "$summary")"
+
+            if [[ "$ci_status" == completed && "$ci_conclusion" != success ]]; then
+              echo "Not merging: CI concluded with $ci_conclusion."
+              exit 0
+            fi
+
+            if [[ "$security_status" == completed && "$security_conclusion" != success ]]; then
+              echo "Not merging: Security concluded with $security_conclusion."
+              exit 0
+            fi
+
+            if [[ "$ci_status" == completed && "$ci_conclusion" == success && \
+                  "$security_status" == completed && "$security_conclusion" == success ]]; then
+              prs="$(gh pr list \
+                --repo "$GITHUB_REPOSITORY" \
+                --state open \
+                --limit 100 \
+                --json number,headRefOid,author)"
+
+              pr_number="$(jq -r --arg sha "$HEAD_SHA" '
+                [.[]
+                  | select(.headRefOid == $sha
+                    and (.author.login == "app/dependabot"
+                      or .author.login == "dependabot[bot]"))]
+                | .[0].number // empty
+              ' <<< "$prs")"
+
+              if [[ -z "$pr_number" ]]; then
+                echo "No open Dependabot PR found for $HEAD_SHA; nothing to merge."
+                exit 0
+              fi
+
+              gh pr merge "$pr_number" \
+                --repo "$GITHUB_REPOSITORY" \
+                --match-head-commit "$HEAD_SHA" \
+                --squash
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "Timed out waiting for CI and Security to finish for $HEAD_SHA."
+          exit 1
